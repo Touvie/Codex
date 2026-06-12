@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio MLP</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="book/style.css">
+    <link rel="stylesheet" href="background/style.css">
+    <style>
+        /* ── Overlays à cadre parchemin (téléchargement, Oblivion) ── */
+        .overlay-menu {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(20,14,6,0.6); display: none;
+            justify-content: center; align-items: center; z-index: 1000;
+        }
+        .overlay-menu.visible { display: flex; }
+        .overlay-menu .dl-box {
+            position: relative;
+            background: #E9E1D2;
+            border: 7px solid #995438;
+            padding: 13px;
+            text-align: center;
+        }
+        .overlay-menu .dl-inner {
+            border: 2px solid #995438;
+            border-radius: 16px;
+            box-shadow: inset 0 0 0 5px #E9E1D2, inset 0 0 0 7px #995438;
+            padding: 34px 46px 30px;
+            background:
+                radial-gradient(circle at 0 0,       #995438 0 24px, transparent 25px) top left,
+                radial-gradient(circle at 100% 0,    #995438 0 24px, transparent 25px) top right,
+                radial-gradient(circle at 0 100%,    #995438 0 24px, transparent 25px) bottom left,
+                radial-gradient(circle at 100% 100%, #995438 0 24px, transparent 25px) bottom right;
+            background-size: 38px 38px;
+            background-repeat: no-repeat;
+        }
+        .overlay-menu h3 {
+            font-family: Georgia, serif;
+            font-size: 13px;
+            font-weight: normal;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #995438;
+            margin-bottom: 24px;
+        }
+        .overlay-menu .menu-text {
+            font-family: Georgia, serif;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #6B5B40;
+            max-width: 290px;
+            margin: 0 auto 22px;
+        }
+        .overlay-menu a {
+            display: block;
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            text-decoration: none;
+            color: #6B5B40;
+            border: 1px solid rgba(153,84,56,0.6);
+            background: rgba(255,252,245,0.45);
+            padding: 10px 24px;
+            margin-bottom: 10px;
+            transition: 0.3s;
+        }
+        .overlay-menu a:hover { background: #995438; color: #F4EFE4; border-color: #995438; }
+        .overlay-menu a:last-child { margin-bottom: 0; }
+        .overlay-menu .menu-close {
+            position: absolute; top: 16px; right: 22px;
+            color: #995438; font-size: 22px;
+            cursor: pointer; font-family: Georgia, serif;
+            z-index: 1;
+        }
+        .overlay-menu .menu-close:hover { color: #6B3A24; }
+
+        /* ── Badge version ────────────────────────────────────────── */
+        #beta-tag {
+            position: fixed;
+            bottom: 14px;
+            left: 14px;
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #8D3B22;
+            border: 1px solid rgba(141,59,34,0.75);
+            background: rgba(232,213,168,0.9);
+            padding: 6px 12px;
+            pointer-events: none;
+            z-index: 6;
+        }
+
+        /* ── Panels de debug : masqués avant même l'init JS ───────── */
+        #debug-panel, #bg-debug-panel, #mode-btn { display: none; }
+
+        /* ── Splash de chargement ─────────────────────────────────── */
+        #splash {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #E8D5A8;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            z-index: 99999;
+        }
+        #splash #splash-enter {
+            margin-top: 30px;
+            background: transparent;
+            border: 1px solid rgba(100,70,20,0.6);
+            color: rgba(80,50,10,0.85);
+            font-family: Georgia, serif;
+            font-size: 11px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            padding: 12px 36px;
+            cursor: pointer;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.4s, opacity 0.6s ease;
+        }
+        #splash #splash-enter.ready { opacity: 1; pointer-events: auto; }
+        #splash #splash-enter:hover {
+            background: rgba(201,168,76,0.12);
+            border-color: rgba(201,168,76,0.9);
+            color: #8a6f3c;
+        }
+        #splash .splash-title {
+            font-family: Georgia, serif;
+            font-size: 22px;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            color: rgba(80,50,10,0.85);
+            margin-bottom: 14px;
+        }
+        #splash .splash-sub {
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: rgba(110,80,40,0.6);
+            margin-bottom: 26px;
+        }
+        #splash .splash-track {
+            width: 200px; height: 2px;
+            background: rgba(110,80,40,0.25);
+        }
+        #splash #splash-pct {
+            margin-top: 12px;
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: rgba(110,80,40,0.7);
+        }
+        #splash #splash-bar {
+            width: 0%; height: 100%;
+            background: #8a6f3c;
+            transition: width 0.25s ease;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+
+    <div id="splash">
+        <div class="splash-title">Portfolio MLP</div>
+        <div class="splash-sub">Chargement des ressources</div>
+        <div class="splash-track"><div id="splash-bar"></div></div>
+        <div id="splash-pct">0%</div>
+        <button id="splash-enter">Entrer</button>
+    </div>
+
+    <div id="hint">Cliquer-glisser pour tourner · Molette pour zoomer</div>
+    <div id="beta-tag">Beta 1.0 — Version non finale</div>
+    <button id="btn">Ouvrir</button>
+
+    <div id="overlay-controls">
+        <button id="focus-mode" class="book-nav-btn">Focus</button>
+        <button id="prev-page" class="book-nav-btn">← Précédent</button>
+        <span id="page-indicator">Page 1</span>
+        <button id="next-page" class="book-nav-btn">Suivant →</button>
+        <button id="overlay-close" class="book-nav-btn" style="border-color:rgba(191,161,129,0.25);color:rgba(191,161,129,0.5);">Fermer</button>
+    </div>
+
+    <div id="download-menu" class="overlay-menu">
+        <div class="dl-box">
+            <span class="menu-close">&times;</span>
+            <div class="dl-inner">
+                <h3>Télécharger l'affiche</h3>
+                <a href="book/downloads/Attention.png"  download>PNG · Image</a>
+                <a href="book/downloads/Attention.pdf"  download>PDF · Impression</a>
+                <a href="book/downloads/Attention.idml" download>IDML · InDesign compatible</a>
+                <a href="book/downloads/Attention.indd" download>INDD · InDesign natif</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="but-menu" class="overlay-menu">
+        <div class="dl-box">
+            <span class="menu-close">&times;</span>
+            <div class="dl-inner">
+                <h3>Télécharger les portfolios</h3>
+                <a href="book/downloads/PINARDAUD_Portfolio_BUT1.pdf" download>PDF · Portfolio BUT 1</a>
+                <a href="#" id="but2-pdf">PDF · Portfolio BUT 2 (actuel)</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="oblivion-menu" class="overlay-menu">
+        <div class="dl-box">
+            <span class="menu-close">&times;</span>
+            <div class="dl-inner">
+                <h3>Avertissement</h3>
+                <p class="menu-text">Vous êtes sur le point de franchir l'horizon des événements. En continuant, une nouvelle page s'ouvrira vers le portfolio Oblivion.</p>
+                <a href="#" id="oblivion-cancel">Continuer la lecture</a>
+                <a href="https://touvie.github.io/Oblivion/" target="_blank" rel="noopener" id="oblivion-go">Continuer vers Oblivion</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="lightbox" id="lightbox">
+        <span class="lightbox-close">&times;</span>
+        <img src="" alt="" id="lightbox-img">
+    </div>
+
+    <!-- Debug panel livre -->
+    <div id="debug-panel" class="collapsed">
+        <div class="debug-header">
+            <h4>WebGL Leaves — debug</h4>
+            <button id="debug-toggle" onclick="this.closest('#debug-panel').classList.toggle('collapsed');this.textContent=this.closest('#debug-panel').classList.contains('collapsed')?'▼':'▲'">▼</button>
+        </div>
+        <div id="debug-body">
+            <div style="font-size:9px;color:#888;margin-bottom:6px;">Pivot groupe (x = bord reliure)</div>
+            <label><span class="lbl">pivot X</span><input type="range" id="d-pivot-x" min="-2" max="2" value="-0.57" step="0.01" data-default="-0.57"><span class="val" id="v-pivot-x">-0.57</span><button class="rst" data-for="d-pivot-x">↺</button></label>
+            <label><span class="lbl">pivot Y</span><input type="range" id="d-pivot-y" min="-2" max="2" value="0" step="0.01" data-default="0"><span class="val" id="v-pivot-y">0.00</span><button class="rst" data-for="d-pivot-y">↺</button></label>
+            <label><span class="lbl">pivot Z</span><input type="range" id="d-pivot-z" min="-1" max="1" value="0" step="0.005" data-default="0"><span class="val" id="v-pivot-z">0.000</span><button class="rst" data-for="d-pivot-z">↺</button></label>
+            <div class="sep"></div>
+            <div style="font-size:9px;color:#888;margin-bottom:6px;">Mesh offset dans groupe</div>
+            <label><span class="lbl">mesh X</span><input type="range" id="d-mesh-x" min="-2" max="2" value="0.7" step="0.01" data-default="0.7"><span class="val" id="v-mesh-x">0.70</span><button class="rst" data-for="d-mesh-x">↺</button></label>
+            <label><span class="lbl">ext outer</span><input type="range" id="d-ext" min="0" max="0.5" value="0.12" step="0.01" data-default="0.12"><span class="val" id="v-ext">0.12</span><button class="rst" data-for="d-ext">↺</button></label>
+            <div class="sep"></div>
+            <div style="font-size:9px;color:#888;margin-bottom:6px;">Rotation mesh (degrés)</div>
+            <label><span class="lbl">mesh rx</span><input type="range" id="d-mrx" min="-180" max="180" value="0" step="1" data-default="0"><span class="val" id="v-mrx">0°</span><button class="rst" data-for="d-mrx">↺</button></label>
+            <label><span class="lbl">mesh ry</span><input type="range" id="d-mry" min="-180" max="180" value="0" step="1" data-default="0"><span class="val" id="v-mry">0°</span><button class="rst" data-for="d-mry">↺</button></label>
+            <label><span class="lbl">mesh rz</span><input type="range" id="d-mrz" min="-180" max="180" value="0" step="1" data-default="0"><span class="val" id="v-mrz">0°</span><button class="rst" data-for="d-mrz">↺</button></label>
+            <div class="sep"></div>
+            <div style="font-size:9px;color:#888;margin-bottom:6px;">Rotation des pages</div>
+            <label><span class="lbl">fold (°)</span><input type="range" id="d-fold" min="-45" max="45" value="10" step="1" data-default="10"><span class="val" id="v-fold">10°</span><button class="rst" data-for="d-fold">↺</button></label>
+            <label><span class="lbl">tilt (°)</span><input type="range" id="d-tilt" min="-180" max="180" value="90" step="1" data-default="90"><span class="val" id="v-tilt">90°</span><button class="rst" data-for="d-tilt">↺</button></label>
+            <div class="sep"></div>
+            <div style="font-size:9px;color:#888;margin-bottom:6px;">Taille du livre</div>
+            <label><span class="lbl">scale</span><input type="range" id="d-scale" min="0.1" max="2.0" value="1.00" step="0.01" data-default="1.00"><span class="val" id="v-scale">0.35</span><button class="rst" data-for="d-scale">↺</button></label>
+            <div class="sep"></div>
+            <div id="debug-out">Ouvrir le livre pour voir les feuilles</div>
+        </div>
+    </div>
+
+    <!-- ─── Script principal ──────────────────────────────────────────────── -->
+    <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { initBackground, updateBackground, setParallaxActive, setInvertEffect } from './background/background.js';
+    import { initBook } from './book/book.js';
+    import { initDrag } from './book/drag.js';
+
+    // ─── Splash de chargement ─────────────────────────────────────────────────
+    // Le splash ne se débloque que quand DEUX conditions sont réunies :
+    // 1. l'init complète du site est terminée (toutes les requêtes de textures lancées)
+    // 2. le DefaultLoadingManager est au repos (tout ce qui a été lancé est arrivé)
+    // Sinon onLoad se déclenche dès la première vague et le splash part trop tôt.
+    const splashEl = document.getElementById('splash');
+    const splashBar = document.getElementById('splash-bar');
+    const splashEnter = document.getElementById('splash-enter');
+    let splashGone = false, managerIdle = false, appInitDone = false;
+
+    const splashPct = document.getElementById('splash-pct');
+    function enterReady() {
+        if (splashGone) return;
+        splashBar.style.width = '100%';
+        splashPct.textContent = '100%';
+        splashEnter.classList.add('ready');
+    }
+    function maybeReady() { if (managerIdle && appInitDone) enterReady(); }
+
+    splashEnter.addEventListener('click', () => {
+        if (splashGone) return;
+        splashGone = true;
+        gsap.to(splashEl, { opacity: 0, duration: 0.7, onComplete: () => splashEl.remove() });
+    });
+
+    THREE.DefaultLoadingManager.onStart = () => { managerIdle = false; };
+    THREE.DefaultLoadingManager.onProgress = (url, loaded, total) => {
+        const pct = Math.round((loaded / total) * 100) + '%';
+        splashBar.style.width = pct;
+        splashPct.textContent = pct;
+    };
+    THREE.DefaultLoadingManager.onLoad = () => { managerIdle = true; maybeReady(); };
+    setTimeout(enterReady, 25000); // garde-fou si une ressource ne répond jamais
+
+    // ─── Renderer ─────────────────────────────────────────────────────────────
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.localClippingEnabled = true;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.domElement.style.zIndex = '3';
+    renderer.setClearColor(0xE8D5A8, 1);
+    document.body.appendChild(renderer.domElement);
+
+    // ─── Scène & caméra ───────────────────────────────────────────────────────
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(0, 0, 5);
+    camera.lookAt(0, 0, 0);
+
+    // ─── Init modules ─────────────────────────────────────────────────────────
+    initBackground(scene, camera);
+    const bookRef = await initBook(scene, renderer);
+    initDrag(renderer, camera, bookRef,
+        () => setParallaxActive(false),
+        () => { if (!window._bookIsOpen) setParallaxActive(true); }
+    );
+
+    // Init terminée : toutes les requêtes de ressources sont désormais lancées
+    appInitDone = true;
+    maybeReady();
+
+    window._setParallaxActive = setParallaxActive;
+
+    // ─── Hotspots cliquables sur les pages ────────────────────────────────────
+    // Zones UV : u gauche→droite, v bas→haut sur l'image de la page.
+    // side : 'left' = page de gauche (verso), 'right' = page de droite (recto).
+    const dlMenu = document.getElementById('download-menu');
+    const oblivionMenu = document.getElementById('oblivion-menu');
+    const butMenu = document.getElementById('but-menu');
+    const openOblivionMenu = () => oblivionMenu.classList.add('visible');
+    const HOTSPOTS = [
+        // Page 1 (page de titre) : menu des portfolios (PDF BUT 1 + PDF BUT 2 généré)
+        { spread: 0, side: 'right', uv: { uMin: 0.42, uMax: 0.60, vMin: 0.05, vMax: 0.16 },
+          action: () => butMenu.classList.add('visible') },
+        // Pages 8-9 : cœur du trou noir (à cheval sur la reliure) → portail Oblivion
+        { spread: 4, side: 'left',  uv: { uMin: 0.86, uMax: 1.00, vMin: 0.42, vMax: 0.58 }, action: openOblivionMenu },
+        { spread: 4, side: 'right', uv: { uMin: 0.00, uMax: 0.15, vMin: 0.42, vMax: 0.58 }, action: openOblivionMenu },
+        // Page 19 : menu de téléchargement de l'affiche (4 formats)
+        { spread: 9, side: 'right', uv: { uMin: 0.38, uMax: 0.62, vMin: 0.05, vMax: 0.16 },
+          action: () => dlMenu.classList.add('visible') },
+    ];
+    const _dlRay = new THREE.Raycaster();
+    const _dlPtr = new THREE.Vector2();
+
+    function hotspotAt(e) {
+        if (!window._bookIsOpen || !window._getSpread || !window._leaves) return null;
+        const { spreadIndex, isFlipping } = window._getSpread();
+        if (isFlipping) return null;
+        const spots = HOTSPOTS.filter(h => h.spread === spreadIndex);
+        if (!spots.length) return null;
+        _dlPtr.x =  (e.clientX / innerWidth)  * 2 - 1;
+        _dlPtr.y = -(e.clientY / innerHeight) * 2 + 1;
+        _dlRay.setFromCamera(_dlPtr, camera);
+        for (const spot of spots) {
+            const group = spot.side === 'left' ? window._leaves[0] : window._leaves[1];
+            if (!group || !group.visible) continue;
+            const hit = _dlRay.intersectObject(group.children[0], false)[0];
+            if (!hit || !hit.uv) continue;
+            if (hit.uv.x >= spot.uv.uMin && hit.uv.x <= spot.uv.uMax
+             && hit.uv.y >= spot.uv.vMin && hit.uv.y <= spot.uv.vMax) return spot;
+        }
+        return null;
+    }
+
+    renderer.domElement.addEventListener('pointermove', (e) => {
+        renderer.domElement.style.cursor = hotspotAt(e) ? 'pointer' : '';
+    });
+    renderer.domElement.addEventListener('click', (e) => {
+        const spot = hotspotAt(e);
+        if (spot) spot.action();
+    });
+
+    // Fermeture des overlays : croix, clic hors cadre, ou bouton d'annulation
+    document.querySelectorAll('.overlay-menu').forEach(menu => {
+        menu.addEventListener('click', (e) => { if (e.target === menu) menu.classList.remove('visible'); });
+        menu.querySelector('.menu-close').addEventListener('click', () => menu.classList.remove('visible'));
+    });
+    document.getElementById('oblivion-cancel').addEventListener('click', (e) => {
+        e.preventDefault();
+        oblivionMenu.classList.remove('visible');
+    });
+    document.getElementById('oblivion-go').addEventListener('click', () => oblivionMenu.classList.remove('visible'));
+
+    // ─── Génération du PDF Portfolio BUT 2 depuis les pages actuelles du livre ──
+    // Chemin de fer : 1 page PDF = 1 double page, paire à gauche, impaire à droite.
+    // La liste window._pageImagePaths (book.js) ne contient que les pages réelles,
+    // les placeholders sont donc exclus d'office.
+    function _loadScript(src) {
+        return new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = src; s.onload = res; s.onerror = rej;
+            document.head.appendChild(s);
+        });
+    }
+    function _loadImage(src) {
+        return new Promise((res) => {
+            const im = new Image();
+            im.onload = () => res(im);
+            im.onerror = () => res(null);
+            im.src = src;
+        });
+    }
+    async function generateBut2Pdf(onProgress) {
+        if (!window.jspdf) await _loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
+        const { jsPDF } = window.jspdf;
+        const pages = window._pageImagePaths || [];
+        if (!pages.length) throw new Error('Liste des pages indisponible');
+        const PW = 1024, PH = 1536; // résolution par page dans le PDF
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'px', format: [PW * 2, PH], hotfixes: ['px_scaling'], compress: true });
+        const cv = document.createElement('canvas');
+        cv.width = PW * 2; cv.height = PH;
+        const ctx = cv.getContext('2d');
+        for (let i = 0; i < pages.length; i += 2) {
+            const [imL, imR] = await Promise.all([
+                _loadImage(pages[i]),
+                pages[i + 1] ? _loadImage(pages[i + 1]) : Promise.resolve(null)
+            ]);
+            ctx.fillStyle = '#E9E1D2';
+            ctx.fillRect(0, 0, PW * 2, PH);
+            if (imL) ctx.drawImage(imL, 0, 0, PW, PH);
+            if (imR) ctx.drawImage(imR, PW, 0, PW, PH);
+            if (i > 0) doc.addPage([PW * 2, PH], 'landscape');
+            doc.addImage(cv.toDataURL('image/jpeg', 0.82), 'JPEG', 0, 0, PW * 2, PH);
+            onProgress(Math.min(100, Math.round(((i + 2) / pages.length) * 100)));
+            await new Promise(r => setTimeout(r)); // laisse l'UI respirer entre les spreads
+        }
+        doc.save('PINARDAUD_Portfolio_BUT2.pdf');
+    }
+
+    const but2Btn = document.getElementById('but2-pdf');
+    const but2Label = but2Btn.textContent;
+    let pdfBusy = false;
+    but2Btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (pdfBusy) return;
+        pdfBusy = true;
+        try {
+            await generateBut2Pdf((pct) => { but2Btn.textContent = 'Génération… ' + pct + '%'; });
+            but2Btn.textContent = but2Label;
+        } catch (err) {
+            console.error('Génération PDF échouée :', err);
+            but2Btn.textContent = 'Erreur — réessayer';
+        }
+        pdfBusy = false;
+    });
+
+    const _clearNormal   = new THREE.Color(0xE8D5A8);
+    const _clearInverted = new THREE.Color(1 - _clearNormal.r, 1 - _clearNormal.g, 1 - _clearNormal.b);
+    const _clearCurrent  = { r: _clearNormal.r, g: _clearNormal.g, b: _clearNormal.b };
+
+    // Mode négatif du décor à l'ouverture : désactivé (passer à true pour le réactiver)
+    const INVERT_EFFECT_ENABLED = false;
+
+    window._setInvertEffect = (active) => {
+        if (!INVERT_EFFECT_ENABLED) active = false;
+        setInvertEffect(active);
+        const target = active ? _clearInverted : _clearNormal;
+        gsap.to(_clearCurrent, {
+            r: target.r, g: target.g, b: target.b,
+            duration: 0.8, ease: 'power2.inOut',
+            onUpdate() { renderer.setClearColor(new THREE.Color(_clearCurrent.r, _clearCurrent.g, _clearCurrent.b)); }
+        });
+    };
+
+    // ─── UI au-dessus du canvas ───────────────────────────────────────────────
+    ['overlay-controls','btn','hint','beta-tag','debug-panel','bg-debug-panel','mode-btn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) document.body.appendChild(el);
+    });
+
+    // ─── Panels de debug masqués par défaut (CSS), touche "$" pour basculer ──
+    let debugVisible = false;
+    const _debugIds = ['debug-panel', 'bg-debug-panel', 'mode-btn'];
+    function _applyDebugVisibility() {
+        _debugIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = debugVisible ? 'block' : 'none';
+        });
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === '$') { debugVisible = !debugVisible; _applyDebugVisibility(); }
+    });
+
+    // ─── OrbitControls (mode debug) ───────────────────────────────────────────
+    const orbit = new OrbitControls(camera, renderer.domElement);
+    orbit.target.set(0, 0, 0);
+    orbit.enableDamping = true;
+    orbit.dampingFactor = 0.08;
+    orbit.enabled = false;
+    let orbitMode = false;
+
+    document.getElementById('mode-btn').addEventListener('click', () => {
+        orbitMode = !orbitMode;
+        orbit.enabled = orbitMode;
+        setParallaxActive(!orbitMode);
+        document.getElementById('mode-btn').textContent = orbitMode ? '✦ Parallaxe' : '🔭 Orbite';
+        if (!orbitMode) {
+            camera.position.set(0, 0.3, 3.5);
+            camera.lookAt(0, 0, 0);
+            orbit.target.set(0, 0, 0);
+            orbit.update();
+        }
+    });
+
+    // ─── Mode focus (lock caméra + livre face aux pages) ──────────────────────
+    let focusLock = false;
+    window._focusLock = false;
+    const _focusCenter = new THREE.Vector3();
+
+    function fitCameraToSpread() {
+        // Bounding box des pages visibles → distance pour remplir l'écran
+        const box = new THREE.Box3();
+        const lv = window._leaves;
+        if (lv) {
+            // Toujours inclure les deux feuilles, même invisibles : le cadrage
+            // reste centré sur le livre quand un seul côté a une page (couverture, fin)
+            box.expandByObject(lv[0]);
+            box.expandByObject(lv[1]);
+        }
+        if (box.isEmpty()) box.setFromCenterAndSize(new THREE.Vector3(0, 0, 0), new THREE.Vector3(3.2, 2.1, 0.1));
+        const center = box.getCenter(_focusCenter);
+        const size = box.getSize(new THREE.Vector3());
+        const vFov = camera.fov * Math.PI / 180;
+        const distH = (size.y / 2) / Math.tan(vFov / 2);
+        const distW = (size.x / 2) / (Math.tan(vFov / 2) * camera.aspect);
+        const dist = Math.max(distH, distW) * 1.12;
+        gsap.to(camera.position, {
+            x: center.x, y: center.y, z: center.z + size.z / 2 + dist,
+            duration: 0.5, ease: 'power2.inOut',
+            onUpdate: () => camera.lookAt(_focusCenter.x, _focusCenter.y, _focusCenter.z)
+        });
+    }
+
+    function resetCameraView() {
+        gsap.to(camera.position, {
+            x: 0, y: 0, z: 5, duration: 0.9, ease: 'power2.inOut',
+            onUpdate: () => camera.lookAt(0, 0, 0)
+        });
+    }
+
+    const focusBtn = document.getElementById('focus-mode');
+    function setFocus(lock) {
+        focusLock = lock;
+        window._focusLock = lock;
+        focusBtn.textContent = lock ? 'Libre' : 'Focus';
+        if (lock) {
+            // Replace le livre en position ouverte de face, puis cadre la caméra
+            bookRef.targetRot.x = 0; bookRef.targetRot.y = -Math.PI / 2;
+            gsap.to(bookRef.book.rotation, { x: 0, y: -Math.PI / 2, duration: 0.4, ease: 'power2.inOut', onComplete: fitCameraToSpread });
+        } else {
+            resetCameraView();
+        }
+    }
+    focusBtn.addEventListener('click', () => setFocus(!focusLock));
+
+    // Focus automatique à l'ouverture du livre (une fois l'animation terminée)
+    document.getElementById('btn').addEventListener('click', () => {
+        if (window._bookIsOpen) {
+            gsap.delayedCall(2.1, () => { if (window._bookIsOpen && !focusLock) setFocus(true); });
+        }
+    });
+
+    // Sortie propre du focus quand on ferme le livre
+    window._resetView = () => {
+        if (focusLock) { focusLock = false; window._focusLock = false; focusBtn.textContent = 'Focus'; }
+        resetCameraView();
+    };
+
+    // ─── Caméra au clavier (livre ouvert, hors focus/orbite) ──────────────────
+    document.addEventListener('keydown', (e) => {
+        if (!window._bookIsOpen || focusLock || orbitMode) return;
+        const step = 0.08, lim = 0.9;
+        if      (e.key === 'ArrowUp')    camera.position.y = Math.min( lim, camera.position.y + step);
+        else if (e.key === 'ArrowDown')  camera.position.y = Math.max(-lim, camera.position.y - step);
+        else if (e.key === 'ArrowLeft')  camera.position.x = Math.max(-lim, camera.position.x - step);
+        else if (e.key === 'ArrowRight') camera.position.x = Math.min( lim, camera.position.x + step);
+        else return;
+        e.preventDefault();
+    });
+
+    // ─── Resize ───────────────────────────────────────────────────────────────
+    window.addEventListener('resize', () => {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+        if (focusLock) fitCameraToSpread();
+    });
+
+    // ─── Boucle ───────────────────────────────────────────────────────────────
+    function animate() {
+        requestAnimationFrame(animate);
+        if (orbitMode) orbit.update();
+        bookRef.updateBook();
+        updateBackground();
+        renderer.render(scene, camera);
+    }
+    animate();
+    </script>
+
+    <!-- Debug panel livre (non-module, lit window._leaves) -->
+    <script>
+    (function() {
+        function applyAll() {
+            const lv = window._leaves;
+            if (!lv || !lv.length) { document.getElementById('debug-out').textContent = '_leaves non prêt'; return; }
+            const px=parseFloat(document.getElementById('d-pivot-x').value);
+            const py=parseFloat(document.getElementById('d-pivot-y').value);
+            const pz=parseFloat(document.getElementById('d-pivot-z').value);
+            const mx=parseFloat(document.getElementById('d-mesh-x').value);
+            const ext=parseFloat(document.getElementById('d-ext').value);
+            const mrx=parseFloat(document.getElementById('d-mrx').value)*Math.PI/180;
+            const mry=parseFloat(document.getElementById('d-mry').value)*Math.PI/180;
+            const mrz=parseFloat(document.getElementById('d-mrz').value)*Math.PI/180;
+            const fold=parseFloat(document.getElementById('d-fold').value)*Math.PI/180;
+            const tilt=parseFloat(document.getElementById('d-tilt').value)*Math.PI/180;
+            if(window._setFold) window._setFold(fold);
+            if(window._setTilt) window._setTilt(tilt);
+            lv.forEach((g,i)=>{
+                if(i===2)return;
+                g.position.x=px; g.position.y=py; g.position.z=pz+i*0.001;
+                const m=g.children[0];
+                if(m){
+                    const baseX=Math.abs(mx), newW=baseX*2+ext, scale=newW/(baseX*2);
+                    m.scale.x=scale; m.position.x=(i===0)?-(baseX+ext/2):(baseX+ext/2);
+                    m.rotation.set(mrx,mry,mrz);
+                }
+            });
+            document.getElementById('debug-out').textContent=`pivotX:${px.toFixed(2)} pivotZ:${pz.toFixed(3)} fold:${(fold*180/Math.PI).toFixed(0)}°`;
+        }
+        document.getElementById('d-scale').addEventListener('input', function() {
+            const s = parseFloat(this.value);
+            document.getElementById('v-scale').textContent = s.toFixed(2);
+            if (window._book) window._book.scale.set(s, s, s);
+        });
+        document.querySelector('button[data-for="d-scale"]').addEventListener('click', function() {
+            const input = document.getElementById('d-scale');
+            input.value = input.dataset.default;
+            input.dispatchEvent(new Event('input'));
+        });
+        const fields=[['d-pivot-x','v-pivot-x',v=>v.toFixed(2)],['d-pivot-y','v-pivot-y',v=>v.toFixed(2)],['d-pivot-z','v-pivot-z',v=>v.toFixed(3)],['d-mesh-x','v-mesh-x',v=>v.toFixed(2)],['d-ext','v-ext',v=>v.toFixed(2)],['d-mrx','v-mrx',v=>v+'°'],['d-mry','v-mry',v=>v+'°'],['d-mrz','v-mrz',v=>v+'°'],['d-fold','v-fold',v=>v+'°'],['d-tilt','v-tilt',v=>v+'°']];
+        fields.forEach(([sid,vid,fmt])=>{
+            document.getElementById(sid).addEventListener('input',function(){document.getElementById(vid).textContent=fmt(parseFloat(this.value));applyAll();});
+        });
+        document.querySelectorAll('#debug-panel button.rst').forEach(btn=>{
+            btn.addEventListener('click',()=>{const input=document.getElementById(btn.dataset.for);input.value=input.dataset.default;input.dispatchEvent(new Event('input'));});
+        });
+    })();
+    </script>
+
+    <!-- Navigation pages -->
+    <script>
+        document.getElementById('next-page').onclick    = () => window.flipForward && window.flipForward();
+        document.getElementById('prev-page').onclick    = () => window.flipBack    && window.flipBack();
+        document.getElementById('overlay-close').onclick = () => {
+            if (window._resetView) window._resetView();
+            document.getElementById('btn').click();
+        };
+        document.getElementById('lightbox').onclick = function() { this.classList.remove('active'); };
+    </script>
+
+</body>
+</html>

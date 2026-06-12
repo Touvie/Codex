@@ -1,0 +1,16 @@
+# Backups locaux
+*.bak
+*.bak[0-9]
+
+# Documentation interne (utile en local, pas sur le site)
+Flux.md
+
+# Prototypes non utilisés par le site
+scene.html
+book-3d-test.html
+
+# Anciennes versions
+Archives/
+
+# Exports de travail (non référencés par le site)
+Pages/

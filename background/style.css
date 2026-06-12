@@ -1,0 +1,66 @@
+#mode-btn {
+    position: fixed;
+    top: 70px;
+    right: 16px;
+    z-index: 10;
+    padding: 7px 14px;
+    font: 13px/1 monospace;
+    background: rgba(0,0,0,0.45);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+#mode-btn:hover { background: rgba(0,0,0,0.65); }
+
+#bg-debug-panel {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 10;
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    font: 12px/1.4 monospace;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    width: 260px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+#bg-debug-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    cursor: pointer;
+}
+#bg-debug-header span { font-weight: bold; font-size: 11px; }
+#bg-debug-body { padding: 8px; }
+#bg-debug-body.hidden { display: none; }
+.bg-layer-row { margin-bottom: 10px; }
+.bg-layer-name { font-size: 11px; color: #ffd; margin-bottom: 3px; }
+.bg-slider-row { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.bg-slider-row label { width: 12px; font-size: 10px; color: #aaa; }
+.bg-slider-row input { flex: 1; accent-color: #ffb; }
+.bg-slider-row .val { width: 34px; text-align: right; font-size: 10px; color: #ffd; }
+#bg-copy-btn {
+    width: 100%;
+    margin-top: 6px;
+    padding: 5px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #fff;
+    font: 11px monospace;
+    border-radius: 4px;
+    cursor: pointer;
+}
+#bg-copy-btn:hover { background: rgba(255,255,255,0.2); }
+#bg-copy-output {
+    margin-top: 6px;
+    font-size: 9px;
+    color: #8f8;
+    word-break: break-all;
+    display: none;
+}
