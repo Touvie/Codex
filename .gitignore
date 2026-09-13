@@ -1,16 +1,17 @@
-# Backups locaux
+# Backups locaux (redondant avec Archives/, gardé par sécurité)
 *.bak
-*.bak[0-9]
+*.bak-*
 
 # Documentation interne (utile en local, pas sur le site)
 Flux.md
+context.md
+Préface.md
+Journal/
 
-# Prototypes non utilisés par le site
-scene.html
-book-3d-test.html
+# PNG sources plein format (4096×6144, impression/PDF) — le site charge
+# book/images-web/*.webp ; ces originaux ne servent qu'en local (~176 Mo,
+# inutile d'alourdir le repo public avec)
+book/images/
 
-# Anciennes versions
+# Anciennes versions / exports de travail
 Archives/
-
-# Exports de travail (non référencés par le site)
-Pages/

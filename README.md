@@ -1,54 +1,128 @@
-# Codex — Portfolio MLP BUT 2 (livre 3D interactif)
+# Codex
 
-Portfolio web sous forme de grimoire 3D que l'on ouvre et feuillette.
-Three.js + GSAP, sans build : tout se charge via CDN (importmap).
-Version actuelle : **Beta 1.0** — publication prévue sur GitHub Pages.
+Cher visiteur, bonjour !
+Je savais bien que des gens viendront ici !
 
-## Arborescence
+Contenu de la nouvelle version Codex 2.0 :
+
+- Refonte du preloader,
+- Refonte totale de la couverture du livre,
+- Rajout de la rétrospective BUT I et diverses pages,
+- Animation d'entrée Oblivion,
+- Amélioration de l'arborescence de fichiers,
+- Pages du livre converties en WebP (chargement bien plus rapide),
+- Favicon (l'arc),
+- humans.txt (easter egg),
+- Correctifs d'affichage et de stabilité.
+
+Prochains ajouts :
+
+- Divers bugs,
+- Responsive téléphone,
+- Page 404,
+- Making-of,
+- Préface.
+
+Arborescence de fichier de septembre 2026 :
 
 ```text
-Codex/
-├── index.html            ← PAGE PRINCIPALE : scène, caméra, splash, focus,
-│                            hotspots de téléchargement, toggle debug ($)
-├── README.md             ← ce fichier
-├── Flux.md               ← comportement du code (qui appelle qui)
+📁 Codex2/
 │
-├── book/
-│   ├── book.js           ← le livre 3D : couverture/dos/reliure procéduraux (SVG → canvas),
-│   │                        dorures, feuilles WebGL, animation de flip, PAGE_TEXTURES
-│   ├── drag.js           ← rotation du livre au cliquer-glisser (souris + tactile),
-│   │                        zoom molette (désactivés en mode focus)
-│   ├── style.css         ← styles UI du livre (overlay-controls, debug-panel, lightbox)
-│   ├── images/           ← pages du livre : 0.png à 19.png (4096×6144)
-│   │                        1 feuille = 2 pages (recto/verso), voir PAGE_TEXTURES
-│   │                        8-9 = trou noir cliquable (portail Oblivion), 19 = affiche
-│   └── downloads/        ← fichiers servis par les boutons de téléchargement :
-│                            PINARDAUD_Portfolio_BUT1.pdf (page 1)
-│                            Attention.png / .pdf / .idml / .indd (page 19)
-│
-├── background/
-│   ├── background.js     ← décor parallaxe : ~20 calques PNG étagés en Z (LAYERS),
-│   │                        dérive des nuages, sway des arbres (shader), effet
-│   │                        d'inversion des couleurs, panel debug des calques
-│   ├── style.css         ← styles des panels debug background + mode-btn
-│   └── images/           ← calques du décor (Circle, Clouds, Mountains, Ruins,
-│                            Floor, Rocks, Trees...)
-│
-├── Pages/                ← exports de travail (non utilisés par le site)
-├── Archives/             ← anciennes versions des prototypes
-├── scene.html            ← ancien prototype décor seul (non utilisé)
-├── book-3d-test.html     ← ancien prototype livre seul (non utilisé)
-└── *.bak / *.bak2        ← backups créés avant chaque session de modification
+├── 📄 index.html
+├── 📄 humans.txt
+├── 📄 robots.txt
+├── 📁 background/
+│   ├── 📄 background.js
+│   ├── 📄 style.css
+│   └── 📁 images/
+│       ├── 🖼️ arc.png
+│       ├── 🖼️ Building.png
+│       ├── 🖼️ Circle.png
+│       ├── 🖼️ Cloud_1.png
+│       ├── 🖼️ Cloud_2.png
+│       ├── 🖼️ Cloud_3-2.png
+│       ├── 🖼️ Cloud_3.png
+│       ├── 🖼️ Cloud_4-2.png
+│       ├── 🖼️ Cloud_4.png
+│       ├── 🖼️ favicon.ico
+│       ├── 🖼️ favicon-180.png
+│       ├── 🖼️ Floor.png
+│       ├── 🖼️ Line.png
+│       ├── 🖼️ Mountains.png
+│       ├── 🖼️ Rocks_1.png
+│       ├── 🖼️ Rocks_2.png
+│       ├── 🖼️ Rocks_3.png
+│       ├── 🖼️ Rocks_4.png
+│       ├── 🖼️ Ruins_1.png
+│       ├── 🖼️ Ruins_2.png
+│       ├── 🖼️ Shapes.png
+│       ├── 🖼️ Tree_1.png
+│       ├── 🖼️ Tree_2.png
+│       ├── 🖼️ Tree_3.png
+│       └── 🖼️ Tree_4.png
+├── 📁 book/
+│   ├── 📄 book.js
+│   ├── 📄 drag.js
+│   ├── 📄 oblivion-transition.js
+│   ├── 📄 style.css
+│   ├── 📁 downloads/
+│   │   ├── 🗂️ Attention.idml
+│   │   ├── 🗂️ Attention.indd
+│   │   ├── 📕 Attention.pdf
+│   │   ├── 🖼️ Attention.png
+│   │   └── 📕 PINARDAUD_Portfolio_BUT1.pdf
+│   ├── 📁 fonts/
+│   │   └── 📄 cinzel_bold.typeface.json
+│   ├── 📁 images-web/
+│   │   ├── 🖼️ 0.webp
+│   │   ├── 🖼️ 1.webp
+│   │   ├── 🖼️ 2.webp
+│   │   ├── 🖼️ 3.webp
+│   │   ├── 🖼️ 4.webp
+│   │   ├── 🖼️ 5.webp
+│   │   ├── 🖼️ 6.webp
+│   │   ├── 🖼️ 7.webp
+│   │   ├── 🖼️ 8.webp
+│   │   ├── 🖼️ 9.webp
+│   │   ├── 🖼️ 10.webp
+│   │   ├── 🖼️ 11.webp
+│   │   ├── 🖼️ 12.webp
+│   │   ├── 🖼️ 13.webp
+│   │   ├── 🖼️ 14.webp
+│   │   ├── 🖼️ 15.webp
+│   │   ├── 🖼️ 16.webp
+│   │   ├── 🖼️ 17.webp
+│   │   ├── 🖼️ 18.webp
+│   │   ├── 🖼️ 19.webp
+│   │   ├── 🖼️ 20.webp
+│   │   ├── 🖼️ 21.webp
+│   │   ├── 🖼️ 22.webp
+│   │   ├── 🖼️ 23.webp
+│   │   ├── 🖼️ 24.webp
+│   │   ├── 🖼️ 25.webp
+│   │   ├── 🖼️ 26.webp
+│   │   ├── 🖼️ 27.webp
+│   │   ├── 🖼️ 28.webp
+│   │   ├── 🖼️ 29.webp
+│   │   ├── 🖼️ 30.webp
+│   │   ├── 🖼️ 31-1.webp
+│   │   ├── 🖼️ 31.webp
+│   │   ├── 🖼️ 32.webp
+│   │   ├── 🖼️ 33.webp
+│   │   ├── 🖼️ 34.webp
+│   │   └── 🖼️ 35.webp
+│   └── 📁 textures/
+│       └── 🖼️ milkyway.jpg
+├── 📁 css/
+│   └── 📄 main.css
+├── 📁 js/
+│   ├── 📄 debug-panel.js
+│   └── 📄 main.js
+└── 📁 vendor/
+    ├── 📄 note-material.js
+    └── 📄 note-renderer.js
+
 ```
 
-## Points d'attention
-
-- **Ajout d'une page** : déposer le PNG dans `book/images/` puis ajouter l'entrée
-  dans `PAGE_TEXTURES` (book.js). 1 entrée = 1 feuille = [recto, verso].
-  `null` = placeholder coloré.
-- **Ajout d'une zone cliquable** : ajouter une entrée dans `HOTSPOTS` (index.html)
-  avec le n° de spread, le rectangle UV et l'action.
-- **Panels de debug** : masqués par défaut, touche `$` pour les afficher.
-- **Poids GPU** : les 21 pages en 4096×6144 ≈ 2,7 Go de VRAM décompressée.
-  À réduire en 2048×3072 avant la version finale (Mac à mémoire partagée).
-- Compatibilité : Safari ≥ 16.4 requis (importmap + top-level await).
+C'est tout pour aujourd'hui, en vous souhaitant une agréable et bonne journée,
+Myself

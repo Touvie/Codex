@@ -1,0 +1,272 @@
+/* ── Overlays à cadre parchemin (téléchargement, Oblivion) ── */
+.overlay-menu {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(20,14,6,0.6); display: none;
+    justify-content: center; align-items: center; z-index: 1000;
+}
+.overlay-menu.visible { display: flex; }
+.overlay-menu .dl-box {
+    position: relative;
+    background: #E9E1D2;
+    border: 7px solid #995438;
+    padding: 13px;
+    text-align: center;
+}
+.overlay-menu .dl-inner {
+    border: 2px solid #995438;
+    border-radius: 16px;
+    box-shadow: inset 0 0 0 5px #E9E1D2, inset 0 0 0 7px #995438;
+    padding: 34px 46px 30px;
+    background:
+        radial-gradient(circle at 0 0,       #995438 0 24px, transparent 25px) top left,
+        radial-gradient(circle at 100% 0,    #995438 0 24px, transparent 25px) top right,
+        radial-gradient(circle at 0 100%,    #995438 0 24px, transparent 25px) bottom left,
+        radial-gradient(circle at 100% 100%, #995438 0 24px, transparent 25px) bottom right;
+    background-size: 38px 38px;
+    background-repeat: no-repeat;
+}
+.overlay-menu h3 {
+    font-family: Georgia, serif;
+    font-size: 13px;
+    font-weight: normal;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #995438;
+    margin-bottom: 24px;
+}
+.overlay-menu .menu-text {
+    font-family: Georgia, serif;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #6B5B40;
+    max-width: 290px;
+    margin: 0 auto 22px;
+}
+.overlay-menu .menu-tip {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    font-style: normal;
+    line-height: 1.5;
+    color: rgba(153,84,56,0.85);
+    max-width: 260px;
+    margin: -10px auto 22px;
+}
+.overlay-menu a {
+    display: block;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-decoration: none;
+    color: #6B5B40;
+    border: 1px solid rgba(153,84,56,0.6);
+    background: rgba(255,252,245,0.45);
+    padding: 10px 24px;
+    margin-bottom: 10px;
+    transition: 0.3s;
+}
+.overlay-menu a:hover { background: #995438; color: #F4EFE4; border-color: #995438; }
+.overlay-menu a:last-child { margin-bottom: 0; }
+.overlay-menu .menu-close {
+    /* Épinglée à cheval sur le coin EXTÉRIEUR de .dl-box (moitié dans,
+       moitié dehors, symétrique) — motif classique de bouton de
+       fermeture. Évite complètement la zone de l'ornement de coin
+       (cercle plein #995438 dans .dl-inner) plutôt que de la longer en
+       essayant de se glisser à côté, ce qui donnait un résultat bancal. */
+    position: absolute; top: -13px; right: -13px;
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: rgba(244,239,228,0.92);
+    box-shadow: 0 1px 3px rgba(60,30,10,0.25);
+    color: #995438; font-size: 22px; line-height: 1;
+    cursor: pointer; font-family: Georgia, serif;
+    z-index: 2;
+}
+.overlay-menu .menu-close:hover { color: #6B3A24; background: #F4EFE4; }
+
+/* ── Badge version (cliquable → modal changelog) ──────────── */
+#beta-tag {
+    position: fixed;
+    bottom: 14px;
+    left: 14px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #8D3B22;
+    border: 1px solid rgba(141,59,34,0.75);
+    background: rgba(232,213,168,0.9);
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+    z-index: 6;
+}
+#beta-tag:hover { background: rgba(232,213,168,1); }
+/* Menu déroulant changelog : s'ouvre VERS LE HAUT depuis le badge (pas un
+   modal centré plein écran comme download/oblivion) — transform-origin en
+   bas + scaleY donne l'impression d'un dépliage plutôt qu'un simple fondu. */
+#version-dropdown {
+    position: fixed;
+    bottom: 54px;
+    left: 14px;
+    width: 260px;
+    max-width: calc(100vw - 28px);
+    background: rgba(232,213,168,0.97);
+    border: 1px solid rgba(141,59,34,0.75);
+    box-shadow: 0 4px 16px rgba(20,14,6,0.35);
+    padding: 16px 18px;
+    z-index: 6;
+    transform-origin: bottom left;
+    transform: scaleY(0.85) translateY(6px);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.25s ease, opacity 0.2s ease;
+}
+#version-dropdown.visible { transform: scaleY(1) translateY(0); opacity: 1; pointer-events: auto; }
+#version-dropdown h4 {
+    font-family: Georgia, serif;
+    font-size: 11px;
+    font-weight: normal;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #995438;
+    text-align: left;
+    margin: 14px 0 6px;
+}
+#version-dropdown h4:first-child { margin-top: 0; }
+#version-dropdown ul {
+    font-family: Georgia, serif;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #6B5B40;
+    text-align: left;
+    margin: 0;
+    padding-left: 16px;
+}
+
+/* ── Panels de debug : masqués avant même l'init JS ───────── */
+#debug-panel, #bg-debug-panel, #mode-btn { display: none; }
+
+/* ── Splash de chargement ─────────────────────────────────── */
+#splash {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    z-index: 99999;
+    overflow: hidden; /* le zoom "à travers l'arche" au clic dépasse largement le viewport */
+}
+/* Fond beige séparé de l'arche : au clic sur Entrer, LUI s'efface (révèle
+   la scène 3D derrière) pendant que l'arche zoome SANS fondu — elle ne
+   doit pas disparaître par transparence, seulement parce que le zoom
+   devient trop fort pour qu'on voie encore ses bords. */
+#splash-bg {
+    position: absolute; inset: 0;
+    background: #E8D5A8;
+    /* z-index négatif obligatoire : un élément positionné (même sans
+       z-index) peint TOUJOURS par-dessus les éléments statiques du
+       flex (desc, messages, barre, bouton) qui n'ont pas de position
+       explicite — sans ça le fond couvrait tout sauf l'arche, qui a
+       elle aussi position:relative. */
+    z-index: -1;
+}
+#splash #splash-enter {
+    margin-top: 30px;
+    background: transparent;
+    border: 1px solid rgba(100,70,20,0.6);
+    color: rgba(80,50,10,0.85);
+    font-family: Georgia, serif;
+    font-size: 11px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    padding: 12px 36px;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.4s, opacity 0.6s ease;
+}
+#splash #splash-enter.ready { opacity: 1; pointer-events: auto; }
+#splash #splash-enter:hover {
+    background: rgba(201,168,76,0.12);
+    border-color: rgba(201,168,76,0.9);
+    color: #8a6f3c;
+}
+/* Arc de triomphe : image (background/images/arc.png) + titre incrusté
+   sur le fronton (bande claire à ~20.5% de la hauteur de l'image —
+   mesuré directement dans le fichier, pas à l'œil). */
+#splash-arch {
+    position: relative;
+    height: 62vh;
+    aspect-ratio: 1837 / 2000;
+    margin-bottom: 10px;
+}
+#splash-arch img { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* Emplacement de la porte (mesuré dans le PNG) — la texture procédurale
+   Note Climber a été retirée (bug de composition non résolu, cf. 2026-09-13).
+   À la place : un extrait statique de la texture voie lactée du livre
+   (book/textures/milkyway.jpg) — laisse deviner ce qu'il y a derrière la
+   porte avant même d'entrer. Recadrée à la silhouette réelle de la porte
+   (sommet en arc, base plate) via un polygone en pourcentages — calculé une
+   fois à la main (rayon = moitié de la largeur de la porte, converti en %
+   de la hauteur de la porte ≈ 29,3%), pas besoin de JS puisque c'est fixe. */
+#splash-door-tex {
+    position: absolute;
+    left: 34.2%; width: 31.6%;
+    top: 40.5%; height: 49.5%;
+    background-image: url('../book/textures/milkyway.jpg');
+    background-size: 250% auto;
+    background-position: 50% 35%;
+    clip-path: polygon(
+        100% 100%, 100% 29.3%, 98.3% 21.7%, 93.3% 14.7%, 85.4% 8.6%,
+        75% 3.9%, 62.9% 1.0%, 50% 0%, 37.1% 1.0%, 25% 3.9%,
+        14.6% 8.6%, 6.7% 14.7%, 1.7% 21.7%, 0% 29.3%, 0% 100%
+    );
+}
+#splash .splash-title {
+    position: absolute;
+    left: 50%; top: 20.5%;
+    transform: translate(-50%, -50%);
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    font-size: clamp(11px, 1.7vw, 17px);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(90,50,15,0.88);
+    white-space: nowrap;
+}
+#splash .splash-desc {
+    font-family: Georgia, serif;
+    font-style: italic;
+    font-size: 12px;
+    max-width: 380px;
+    text-align: center;
+    line-height: 1.5;
+    color: rgba(90,60,20,0.65);
+    margin-bottom: 22px;
+}
+#splash .splash-sub {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(110,80,40,0.6);
+    margin-bottom: 26px;
+    min-height: 12px;
+}
+#splash .splash-track {
+    width: 200px; height: 2px;
+    background: rgba(110,80,40,0.25);
+}
+#splash #splash-pct {
+    margin-top: 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: rgba(110,80,40,0.7);
+}
+#splash #splash-bar {
+    width: 0%; height: 100%;
+    background: #8a6f3c;
+    transition: width 0.25s ease;
+}

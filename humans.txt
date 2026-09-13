@@ -1,0 +1,14 @@
+/* TEAM */
+    Auteur, développeur, chef d'orchestre -- Romain Pinaraud (Touvie)
+
+/* THANKS */
+    Aucun humain n'a été (trop) maltraité durant la création de ce site.
+    Un bug de shader jamais résolu, en revanche.
+
+/* SITE */
+    Dernière mise à jour : Septembre 2026
+    Langue : Français
+    Doctype : HTML5
+    Composants : Three.js, GSAP
+    Standards : HTML5, CSS3, ES Modules
+    Logiciel : Visual Studio Code, Claude Code

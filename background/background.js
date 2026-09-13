@@ -4,22 +4,25 @@ const IMG_PATH = 'background/images/';
 
 const LAYERS = [
     { file: 'Circle.png',       z: -8,   parallax: 0.00, x:  0.00, y:  0.00 },
-    { file: 'Shapes.png',       z: -7.9, parallax: 0.01, x:  0.00, y:  0.00 },
-    { file: 'Cloud_1.png',      z: -6,   parallax: 0.04, x:  0.00, y:  0.00, speed: 0.0042, animX: 20 },
-    { file: 'Cloud_2.png',      z: -6,   parallax: 0.05, x:  0.00, y:  0.00, speed: 0.0070, animX: 30 },
-    { file: 'Cloud_3-2.png',    z: -5.8, parallax: 0.04, x:  0.00, y:  0.00, speed: 0.0035, animX: 40 },
-    { file: 'Cloud_4-2.png',    z: -5.8, parallax: 0.06, x:  0.00, y:  0.00, speed: 0.0055, animX: 50 },
-    { file: 'Mountains.png',    z: -5,   parallax: 0.07, x:  0.00, y:  0.00 },
-    { file: 'Building.png',     z: -3,   parallax: 0.10, x:  0.00, y:  0.00 },
-    { file: 'Ruins_1.png',      z: -3,   parallax: 0.10, x:  0.00, y:  0.00 },
-    { file: 'Ruins_2.png',      z: -2.8, parallax: 0.11, x:  0.00, y:  1.50 },
-    { file: 'Line.png',         z: -2,   parallax: 0.13, x:  0.00, y:  0.00 },
+    { file: 'Shapes.png',       z: -7.9, parallax: 0.01, x:  0.00, y:  0.00, segsY: 10 },
+    { file: 'Cloud_1.png',      z: -6,   parallax: 0.04, x:  0.00, y:  0.00, speed: 0.0042, animX: 20, segsY: 10 },
+    { file: 'Cloud_2.png',      z: -6,   parallax: 0.05, x:  0.00, y:  0.00, speed: 0.0070, animX: 30, segsY: 10 },
+    { file: 'Cloud_3-2.png',    z: -5.8, parallax: 0.04, x:  0.00, y:  0.00, speed: 0.0035, animX: 40, segsY: 10 },
+    { file: 'Cloud_4-2.png',    z: -5.8, parallax: 0.06, x:  0.00, y:  0.00, speed: 0.0055, animX: 50, segsY: 10 },
+    { file: 'Mountains.png',    z: -5,   parallax: 0.07, x:  0.00, y:  0.00, segsY: 10 },
+    // segsY sur les objets ci-dessous : nécessaire pour la transition Oblivion v2
+    // (enroulement en spirale) — un simple quad (segsY=1) ne peut que cisailler
+    // en bloc, pas se courber lisse.
+    { file: 'Building.png',     z: -3,   parallax: 0.10, x:  0.00, y:  0.00, segsY: 16 },
+    { file: 'Ruins_1.png',      z: -3,   parallax: 0.10, x:  0.00, y:  0.00, segsY: 16 },
+    { file: 'Ruins_2.png',      z: -2.8, parallax: 0.11, x:  0.00, y:  1.50, segsY: 16 },
+    { file: 'Line.png',         z: -2,   parallax: 0.13, x:  0.00, y:  0.00, segsY: 12 },
     // Floor_Shadow.png — non exporté depuis PS (à ajouter quand disponible)
     { file: 'Floor.png',        z: -1.8, parallax: 0.14, x:  0.00, y:  0.00 },
-    { file: 'Rocks_1.png',      z: -1,   parallax: 0.17, x:  3.00, y: -0.55 },
-    { file: 'Rocks_2.png',      z: -1,   parallax: 0.17, x:  1.00, y:  0.50 },
-    { file: 'Rocks_3.png',      z: -1,   parallax: 0.17, x: -2.00, y:  1.40 },
-    { file: 'Rocks_4.png',      z: -1,   parallax: 0.17, x: -3.00, y: -1.00 },
+    { file: 'Rocks_1.png',      z: -1,   parallax: 0.17, x:  3.00, y: -0.55, segsY: 12 },
+    { file: 'Rocks_2.png',      z: -1,   parallax: 0.17, x:  1.00, y:  0.50, segsY: 12 },
+    { file: 'Rocks_3.png',      z: -1,   parallax: 0.17, x: -2.00, y:  1.40, segsY: 12 },
+    { file: 'Rocks_4.png',      z: -1,   parallax: 0.17, x: -3.00, y: -1.00, segsY: 12 },
     // Shape.png — non exporté depuis PS (à ajouter quand disponible)
     { file: 'Tree_1.png',       z: -0.5, parallax: 0.22, x:  0.00, y:  0.00, sway: 0.0, segsY: 24 },
     { file: 'Tree_2.png',       z: -0.5, parallax: 0.22, x:  0.00, y:  0.00, sway: 1.3, segsY: 24 },
@@ -30,6 +33,7 @@ const LAYERS = [
 let _camera;
 let _meshes = [];
 let _parallaxActive = true;
+let _transitionActive = false;
 let mx = 0, my = 0, tx = 0, ty = 0;
 const LERP = 0.06;
 
@@ -86,9 +90,14 @@ export function initBackground(scene, camera) {
         _addInvertShader(mat);
         if (layer.sway !== undefined) _addSwayShader(mat, layer.sway);
         const segsY = layer.segsY || 1;
-        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.15, h * 1.15, 1, segsY), mat);
+        // Grille 2D (pas juste des lignes horizontales) quand segsY est défini : permet
+        // un enroulement lisse (twirl) dans la transition Oblivion v2, pas juste un
+        // cisaillement à 2 points de large.
+        const segsX = layer.segsY ? segsY : 1;
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.15, h * 1.15, segsX, segsY), mat);
         mesh.position.set(layer.x, layer.y, layer.z);
         mesh.renderOrder = i;
+        mesh.userData.file = layer.file; // pour classifier le calque (léger/lourd) dans la transition Oblivion
         scene.add(mesh);
         _meshes.push(mesh);
     });
@@ -104,7 +113,8 @@ export function initBackground(scene, camera) {
             const { w, h } = visibleSizeAtZ(LAYERS[i].z);
             mesh.geometry.dispose();
             const segsY = LAYERS[i].segsY || 1;
-            mesh.geometry = new THREE.PlaneGeometry(w * 1.15, h * 1.15, 1, segsY);
+            const segsX = LAYERS[i].segsY ? segsY : 1;
+            mesh.geometry = new THREE.PlaneGeometry(w * 1.15, h * 1.15, segsX, segsY);
         });
     });
 
@@ -113,6 +123,10 @@ export function initBackground(scene, camera) {
 
 export function updateBackground() {
     _swayTime.value += 0.016;
+
+    // Pendant la transition Oblivion, la position des calques est pilotée par
+    // le module de transition (aspiration) : on gèle le repositionnement parallaxe.
+    if (_transitionActive) return;
 
     if (_parallaxActive) {
         mx += (tx - mx) * LERP;
@@ -138,6 +152,10 @@ export function updateBackground() {
 export function setInvertEffect(active) {
     gsap.to(_invertUniform, { value: active ? 1.0 : 0.0, duration: 0.8, ease: 'power2.inOut' });
 }
+
+// Accès aux calques et au gel des positions pour le module de transition Oblivion.
+export function getLayerMeshes() { return _meshes; }
+export function setTransitionActive(active) { _transitionActive = active; }
 
 export function setParallaxActive(active) {
     _parallaxActive = active;

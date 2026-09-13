@@ -3,7 +3,7 @@ export function initDrag(renderer, camera, bookRef, onDragStart, onDragEnd) {
     let drag = false, prevX = 0, prevY = 0;
 
     function startDrag(clientX, clientY) {
-        if (window._focusLock) return;
+        if (window._focusLock || window._orbitMode) return;
         drag = true;
         prevX = clientX;
         prevY = clientY;
@@ -43,7 +43,7 @@ export function initDrag(renderer, camera, bookRef, onDragStart, onDragEnd) {
     renderer.domElement.addEventListener('touchend', endDrag);
 
     renderer.domElement.addEventListener('wheel', e => {
-        if (window._focusLock) return;
+        if (window._focusLock || window._orbitMode) return;
         camera.position.z = Math.max(1, Math.min(5, camera.position.z + e.deltaY * 0.004));
     }, { passive: true });
 }

@@ -198,6 +198,128 @@ function makeSpineTex() {
     return new THREE.CanvasTexture(cv);
 }
 
+// ─── Couverture galaxie (reflet équirectangulaire net, fait main) ─────────────
+// Voie lactée réfléchie sur la couverture (devant/dos/tranche) — chaque face a
+// sa propre normale, donc chacune "voit" une portion différente du panorama
+// selon son orientation. PAS de MeshStandardMaterial+envMap : ça oblige à passer
+// par PMREMGenerator, qui PRÉ-FLOUTE l'environnement (conçu pour de l'éclairage
+// physique basse résolution ~1024×512, pas un reflet net) — incompatible avec
+// une image 4K+ qu'on veut nette. Ici : ShaderMaterial fait main, échantillonne
+// milkyway.jpg en pleine résolution selon le vecteur de réflexion, aucun flou.
+const GALAXY_THEMES = {
+    // Couleur native, même formule que le skybox d'Oblivion14.5 (app.js) :
+    // pow(rgb, 3.0) * 1.5, un simple boost de contraste, pas de teinte.
+    normal: { gamma: [3.0, 3.0, 3.0], gain: [1.5, 1.5, 1.5] },
+    or:    { gamma: [2.0, 2.5, 4.5], gain: [2.5, 1.6, 0.15] },
+    rouge: { gamma: [1.8, 4.5, 4.5], gain: [3.0, 0.1,  0.1 ] },
+    blanc: { gamma: [0.7, 0.7, 0.7], gain: [1.6, 1.6,  1.8 ] },
+    bleu:  { gamma: [4.0, 3.5, 1.8], gain: [0.2, 0.3,  2.5 ] },
+};
+const galaxyGamma = new THREE.Vector3(...GALAXY_THEMES.normal.gamma);
+const galaxyGain  = new THREE.Vector3(...GALAXY_THEMES.normal.gain);
+// Décalage global appliqué IDENTIQUEMENT aux 3 faces (cf. updateBook) : garde la
+// continuité (même décalage partout, les coutures restent alignées) tout en
+// redonnant du mouvement — sans lui la bande est figée tant qu'aucune face
+// nouvelle n'apparaît physiquement.
+const galaxyParallax  = { value: 0 }; // horizontal, piloté par book.rotation.y
+const galaxyParallaxV = { value: 0 }; // vertical, piloté par book.rotation.x — sans lui, seul le sens gauche/droite bougeait
+// Centre horizontal de la bande dans l'image (0..1) : partagé, réglable en live
+// via le slider "orientation" (panneau debug), pour choisir la portion visible.
+const galaxyUCenter = { value: 0.57 };
+
+// Reflet-miroir abandonné : deux faces adjacentes d'une boîte ont des normales
+// à 90° l'une de l'autre, donc un reflet ne peut PHYSIQUEMENT pas être continu
+// à leurs arêtes (comme un vrai objet à angles vifs). À la place : une étiquette
+// dépliée autour de la reliure — coordonnée U calculée en espace LOCAL (pas de
+// caméra/reflet), continue aux deux coutures (devant↔tranche, tranche↔dos).
+// Réagit quand même : tourner le livre révèle progressivement les faces, chacune
+// montrant sa portion fixe et continue de la bande.
+//   localUExpr : expression GLSL utilisant `position` (coordonnée locale brute,
+//                avant décalage) — diffère par face selon son orientation.
+//   halfWidth  : demi-largeur de CETTE face le long de l'axe d'enroulement.
+//   stripOffset: où cette face commence dans la bande dépliée totale.
+//   stripTotal : longueur totale de la bande (devant + tranche + dos).
+//   bookHeight : hauteur du livre (H+OV*2), pour la coordonnée V.
+// La bande galactique brillante n'occupe qu'une tranche étroite de l'image
+// source (le reste est du ciel vide, en haut/bas) — recadrage vertical pour que
+// la hauteur du livre corresponde à CETTE bande, pas à toute la hauteur de
+// l'équirectangulaire (pôle à pôle), sinon la nébuleuse est écrasée sur une
+// mince ligne au milieu avec du noir partout autour.
+// Three.js flip verticalement les textures chargées depuis une image (flipY),
+// donc la bande repérée visuellement en haut de l'image correspond à un V UV
+// plus GRAND, pas plus petit — estimation à l'œil, pas mesurée au pixel près.
+const GALAXY_V_MIN = 0.35, GALAXY_V_MAX = 0.68;
+const GALAXY_V_SPAN = GALAXY_V_MAX - GALAXY_V_MIN;
+const GALAXY_IMG_ASPECT = 2.0; // milkyway.jpg = 6000×3000
+// uSpan calculé (pas deviné) pour que U et V utilisent la MÊME échelle pixels-
+// monde : sans ça, comme on n'utilisait que 33% de la hauteur de l'image mais
+// 100% de sa largeur, le rendu était étiré verticalement d'un facteur ~4 (l'aspect
+// "pété"). Passé en paramètre plutôt que recalculé dans le shader (identique pour
+// les 3 faces, autant le calculer une fois en JS).
+function makeGalaxyMaterial(localUExpr, halfWidth, stripOffset, stripTotal, bookHeight, uSpan) {
+    return new THREE.ShaderMaterial({
+        uniforms: {
+            uGalaxyTex: { value: null }, // assignée une fois l'image chargée (cf. initBook)
+            uGamma: { value: galaxyGamma },
+            uGain:  { value: galaxyGain },
+            uParallax:  galaxyParallax,  // même objet uniform partagé par les 3 faces
+            uParallaxV: galaxyParallaxV,
+            uUCenter:   galaxyUCenter,   // orientation choisie au slider (panneau debug)
+        },
+        vertexShader: `
+            uniform float uParallax;
+            uniform float uParallaxV;
+            uniform float uUCenter;
+            varying vec2 vGalaxyUv;
+            void main() {
+                float localU = (${localUExpr}) + ${halfWidth.toFixed(6)};
+                float stripFrac = (localU + ${stripOffset.toFixed(6)}) / ${stripTotal.toFixed(6)};
+                float u = uUCenter - ${(uSpan / 2).toFixed(6)} + stripFrac * ${uSpan.toFixed(6)} + uParallax * ${uSpan.toFixed(6)};
+                float vRaw = position.y / ${bookHeight.toFixed(6)} + 0.5;
+                float v = mix(${GALAXY_V_MIN.toFixed(6)}, ${GALAXY_V_MAX.toFixed(6)}, vRaw) + uParallaxV * ${GALAXY_V_SPAN.toFixed(6)};
+                // u N'EST PAS wrappé ici (pas de fract) : une face n'a que 4 sommets, et
+                // wrapper par sommet fait interpoler le GPU linéairement entre p.ex.
+                // fract=0.97 et fract=0.02 en passant par 0.5 (tout l'inverse de l'image
+                // au lieu de juste traverser la couture 0/1) dès que la fenêtre de crop
+                // chevauche cette couture — c'était le vrai bug (bruit/rayures, uniquement
+                // sur l'axe qui utilisait fract, jamais sur V). Le wrap se fait à la place
+                // par pixel dans le fragment shader, où fract() d'une valeur interpolée en
+                // continu est exact.
+                vGalaxyUv = vec2(u, clamp(v, 0.0, 1.0));
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            uniform sampler2D uGalaxyTex;
+            uniform vec3 uGamma;
+            uniform vec3 uGain;
+            varying vec2 vGalaxyUv;
+            void main() {
+                vec3 c = texture2D(uGalaxyTex, vec2(fract(vGalaxyUv.x), vGalaxyUv.y)).rgb;
+                c = pow(max(c, vec3(0.0001)), uGamma) * uGain;
+                // Dither : casse les bandes de quantification 8-bit d'une courbe gamma
+                // raide (ex. thème "or", canal bleu gamma=4.5) en grain imperceptible.
+                float dither = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233))) * 43758.5453) - 0.5) / 255.0;
+                c += dither;
+                gl_FragColor = vec4(c, 1.0);
+            }
+        `,
+    });
+}
+
+// Change le thème de couleur en direct (tous les matériaux galaxie partagent
+// les mêmes uniforms galaxyGamma/galaxyGain, donc un seul set suffit).
+window._setGalaxyTheme = (name) => {
+    const t = GALAXY_THEMES[name];
+    if (!t) return;
+    galaxyGamma.set(...t.gamma);
+    galaxyGain.set(...t.gain);
+};
+
+// Orientation de la voie lactée (0..1, quelle portion horizontale de l'image
+// est centrée sur les couvertures) — réglable en live via le slider debug.
+window._setGalaxyOrientation = (v) => { galaxyUCenter.value = v; };
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 export async function initBook(scene, renderer) {
@@ -234,18 +356,49 @@ export async function initBook(scene, renderer) {
     const pagesTex    = makePagesTex();
     const pagesTexTop = makePagesTex();
     pagesTexTop.rotation = Math.PI/2; pagesTexTop.center.set(0.5,0.5);
-    const coverTex     = await makeCoverTex();
-    const coverBumpTex = makeCoverBumpTex();
-    const spineCoverTex = await makeSpineCoverTex();
+    // makeCoverTex()/makeSpineCoverTex()/makeCoverBumpTex() (étoiles + fond bleu
+    // SVG, relief embossé) ne sont plus appelées : remplacées par le reflet
+    // galaxie ci-dessous. Fonctions gardées telles quelles si on veut réintégrer
+    // ces détails plus tard.
 
     const matLeather = new THREE.MeshStandardMaterial({ map:leatherTex, color:0x1c0e05, roughness:0.88, metalness:0.04 });
     const matSpine   = new THREE.MeshStandardMaterial({ map:spineTex,   color:0x1c0e05, roughness:0.88, metalness:0.04 });
     const matPages   = new THREE.MeshStandardMaterial({ color:0xf0e4d0, roughness:0.92, metalness:0.0 });
     const matPagesEdge = new THREE.MeshStandardMaterial({ map:pagesTex, color:0xf0e4d0, roughness:0.92, metalness:0.0 });
     const matPagesTop  = new THREE.MeshStandardMaterial({ map:pagesTexTop, color:0xf0e4d0, roughness:0.92, metalness:0.0 });
-    const matGold = new THREE.MeshStandardMaterial({ color:0xc9a84c, roughness:0.22, metalness:0.90 });
-    const matCoverFront = new THREE.MeshStandardMaterial({ map:coverTex, bumpMap:coverBumpTex, bumpScale:0.5, roughness:0.84, metalness:0.05 });
-    const matSpineCover = new THREE.MeshStandardMaterial({ map:spineCoverTex, roughness:0.84, metalness:0.05 });
+    // metalness haut (0.90 à l'origine) fait dépendre la couleur perçue presque
+    // entièrement des reflets d'environnement (spéculaire), pas de l'albédo — sans
+    // skybox/lumière riche à refléter, le métal tombe gris selon l'angle/l'éclairage
+    // (constaté : blanc "sous la bonne lumière" seulement). Metalness baissé +
+    // emissive de sécurité (même teinte, faible intensité) pour un rendu fiable.
+    const matGold = new THREE.MeshStandardMaterial({ color:0xffffff, roughness:0.30, metalness:0.55, emissive:0xffffff, emissiveIntensity:0.15 });
+    // Couverture (devant, dos, tranche) : galaxie en étiquette dépliée continue
+    // (cf. makeGalaxyMaterial), gradation couleur appliquée en live via
+    // galaxyGamma/Gain. Bande dans l'ordre devant → tranche → dos, les deux
+    // coutures (aux charnières) se raccordent exactement.
+    const galaxyWf = W + OV;        // largeur devant/dos
+    const galaxyWs = D + CT * 2;    // largeur tranche
+    const galaxyStripTotal = galaxyWf + galaxyWs + galaxyWf;
+    const galaxyBookHeight = H + OV * 2;
+    // Échelle U cohérente avec le recadrage V (cf. commentaire sur GALAXY_V_SPAN) :
+    // même nombre d'unités-monde par pixel source dans les deux sens → pas de
+    // déformation, juste un zoom plus ou moins fort selon la taille du livre.
+    const galaxyUSpan = galaxyStripTotal * GALAXY_V_SPAN / (galaxyBookHeight * GALAXY_IMG_ASPECT);
+    const matGalaxyFront = makeGalaxyMaterial('-position.x', galaxyWf / 2, 0, galaxyStripTotal, galaxyBookHeight, galaxyUSpan);
+    const matGalaxySpine = makeGalaxyMaterial('-position.z', galaxyWs / 2, galaxyWf, galaxyStripTotal, galaxyBookHeight, galaxyUSpan);
+    const matGalaxyBack  = makeGalaxyMaterial('position.x',  galaxyWf / 2, galaxyWf + galaxyWs, galaxyStripTotal, galaxyBookHeight, galaxyUSpan);
+    // Texture assignée une fois chargée (fichier de 8 Mo, ne pas bloquer le reste
+    // de l'init dessus) — mêmes 3 matériaux, une seule texture.
+    new THREE.TextureLoader().load('book/textures/milkyway.jpg', (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.wrapS = THREE.RepeatWrapping; // uParallax peut pousser stripU près de 0/1 (fract)
+        // Sans anisotropie, une image aussi grande vue en biais (couverture pas
+        // pile face caméra) donne des bandes de moiré/aliasing — même fix déjà
+        // utilisé plus haut pour les textures de pages (_loadTex).
+        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        renderer.initTexture(tex);
+        [matGalaxyFront, matGalaxySpine, matGalaxyBack].forEach(m => { m.uniforms.uGalaxyTex.value = tex; });
+    });
 
     const spineClipPlane = new THREE.Plane();
     const _spineEdgeLocal  = new THREE.Vector3(-W/2,0,0);
@@ -264,16 +417,16 @@ export async function initBook(scene, renderer) {
     book.add(backPivot);
     const backPages = new THREE.Mesh(new THREE.BoxGeometry(W,H,D/2), [matPagesEdge,matPages,matPagesTop,matPagesTop,matPages,matPages]);
     backPages.position.set(W/2,0,D/4); backPages.castShadow=true; backPivot.add(backPages);
-    const backCover = new THREE.Mesh(new THREE.BoxGeometry(W+OV,H+OV*2,CT), [matLeather,matLeather,matLeather,matLeather,matLeather,matCoverFront]);
+    const backCover = new THREE.Mesh(new THREE.BoxGeometry(W+OV,H+OV*2,CT), [matLeather,matLeather,matLeather,matLeather,matLeather,matGalaxyBack]);
     backCover.position.set((W+OV)/2,0,-CT/2); backCover.castShadow=true; backPivot.add(backCover);
 
-    const spineEl = new THREE.Mesh(new THREE.BoxGeometry(CT,H+OV*2,D+CT*2), [matLeather,matSpineCover,matLeather,matLeather,matSpine,matSpine]);
+    const spineEl = new THREE.Mesh(new THREE.BoxGeometry(CT,H+OV*2,D+CT*2), [matLeather,matGalaxySpine,matLeather,matLeather,matSpine,matSpine]);
     spineEl.position.set(-(W/2+CT/2),0,0); spineEl.castShadow=true; book.add(spineEl);
 
     const frontPivot = new THREE.Group();
     frontPivot.position.set(-W/2,0,D/2);
     book.add(frontPivot);
-    const frontCover = new THREE.Mesh(new THREE.BoxGeometry(W+OV,H+OV*2,CT), [matLeather,matLeather,matLeather,matLeather,matCoverFront,matLeather]);
+    const frontCover = new THREE.Mesh(new THREE.BoxGeometry(W+OV,H+OV*2,CT), [matLeather,matLeather,matLeather,matLeather,matGalaxyFront,matLeather]);
     frontCover.position.set((W+OV)/2,0,CT/2); frontCover.castShadow=true; frontPivot.add(frontCover);
     const frontPages = new THREE.Mesh(new THREE.BoxGeometry(W,H,D/2), [matPagesEdge,matPages,matPagesTop,matPagesTop,matPages,matPages]);
     frontPages.position.set(W/2,0,-D/4); frontPages.castShadow=true; frontPivot.add(frontPages);
@@ -284,102 +437,295 @@ export async function initBook(scene, renderer) {
     const frameT=0.011, frameInsetX=0.025, frameInsetY=0.028;
     const frameW=(W+OV)-2*frameInsetX, frameH=(H+OV*2)-2*frameInsetY;
     const frameTopY=topY-frameInsetY, frameZ=CT+frameT/2;
-    const ruleY=195/768*(H+OV*2), ruleW=frameW, ruleT=0.006;
+    const ruleT=0.006;
     const circleScale=(W+OV)/512, circleR0=132*circleScale, circleR1=118*circleScale, circleZ=frameZ+0.004;
 
-    function buildGoldOrnaments() {
+    // scale ne change QUE la taille des barres/anneaux dessinés, jamais leur
+    // position (basée sur les constantes nominales cornerT/frameT/circleR
+    // ci-dessus) — sinon les coins/cadres se décaleraient au lieu de juste
+    // grossir/rétrécir sur place quand on ajuste "grosseur" en live.
+    // opts.rings : les 2 anneaux du cadran de l'horloge.
+    // Devant = coins + cadre seulement ("CODEX" + filet court ajoutés à part) ;
+    // dos = coins + cadre + anneaux (horloge).
+    function buildGoldOrnaments(scale, opts) {
+        const withRings = !opts || opts.rings !== false;
+        const cT=cornerT*scale, fT=frameT*scale;
         const g=new THREE.Group();
         const czp=CT+cornerT/2;
         // Coins
         [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([sx,sy]) => {
-            const hBar=new THREE.Mesh(new THREE.BoxGeometry(cornerSize,cornerT,cornerT+0.002),matGold);
+            const hBar=new THREE.Mesh(new THREE.BoxGeometry(cornerSize,cT,cT+0.002),matGold);
             hBar.position.set(sx*(halfW-cornerSize/2), topY*sy-sy*cornerT/2, czp);
             g.add(hBar);
-            const vBar=new THREE.Mesh(new THREE.BoxGeometry(cornerT,cornerSize,cornerT+0.002),matGold);
+            const vBar=new THREE.Mesh(new THREE.BoxGeometry(cT,cornerSize,cT+0.002),matGold);
             vBar.position.set(sx*(halfW-cornerT/2), topY*sy-sy*(cornerSize/2), czp);
             g.add(vBar);
         });
         // Cadre
-        [[frameW+frameT,frameT,frameT,0,frameTopY],[frameW+frameT,frameT,frameT,0,-frameTopY],[frameT,frameH,frameT,-(halfW-frameInsetX),0],[frameT,frameH,frameT,halfW-frameInsetX,0]]
+        [[frameW+fT,fT,fT,0,frameTopY],[frameW+fT,fT,fT,0,-frameTopY],[fT,frameH,fT,-(halfW-frameInsetX),0],[fT,frameH,fT,halfW-frameInsetX,0]]
             .forEach(([bw,bh,bd,bx,by]) => { const bar=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),matGold); bar.position.set(bx,by,frameZ); g.add(bar); });
-        // Règles + losanges
-        [-ruleY,ruleY].forEach(ry => {
-            const rule=new THREE.Mesh(new THREE.BoxGeometry(ruleW,ruleT,ruleT+0.002),matGold);
-            rule.position.set(0,ry,frameZ); g.add(rule);
-            const d=new THREE.Mesh(new THREE.BoxGeometry(0.055,0.055,0.013),matGold);
-            d.rotation.z=Math.PI/4; d.position.set(0,ry,frameZ+0.007); g.add(d);
-        });
-        const dotSz=frameT*2.5;
-        [-ruleY,ruleY].forEach(ry => [-(halfW-frameInsetX),halfW-frameInsetX].forEach(rx => {
-            const dot=new THREE.Mesh(new THREE.BoxGeometry(dotSz,dotSz,dotSz),matGold);
-            dot.position.set(rx,ry,frameZ); g.add(dot);
-        }));
-        // Anneaux
-        [[circleR0,0.006,6,90],[circleR1,0.004,6,80]].forEach(([r,tube,rs,ts]) => {
-            const ring=new THREE.Mesh(new THREE.TorusGeometry(r,tube,rs,ts),matGold);
-            ring.position.set(0,0,circleZ); g.add(ring);
-        });
+        if (withRings) {
+            // Anneaux (cadran de l'horloge)
+            [[circleR0,0.006*scale,6,90],[circleR1,0.004*scale,6,80]].forEach(([r,tube,rs,ts]) => {
+                const ring=new THREE.Mesh(new THREE.TorusGeometry(r,tube,rs,ts),matGold);
+                ring.position.set(0,0,circleZ); g.add(ring);
+            });
+        }
         return g;
     }
 
-    const frontGold=buildGoldOrnaments();
+    // Filet court (barre + losange) au-dessus et en-dessous d'un contenu — PAS une
+    // barre pleine largeur qui coupe toute la couverture. Même langage graphique
+    // pour le cadran de l'horloge (dos, autour du cercle) et "CODEX" (devant,
+    // autour du texte) : demandé explicitement après retour ("le style du CODEX...
+    // sur la couverture de l'horloge" plutôt que l'inverse).
+    function buildTitleRules(group, halfContentW, halfContentH) {
+        const ruleW = halfContentW * 2 + 0.10, gapY = halfContentH + 0.05;
+        [gapY, -gapY].forEach(ry => {
+            const rule = new THREE.Mesh(new THREE.BoxGeometry(ruleW, ruleT, ruleT + 0.002), matGold);
+            rule.position.set(0, ry, frameZ); group.add(rule);
+            const d = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, 0.012), matGold);
+            d.rotation.z = Math.PI / 4; d.position.set(0, ry, frameZ + 0.006); group.add(d);
+        });
+    }
+
+    // Devant = coins + cadre ("CODEX" + filet court ajoutés à part) ; dos = coins
+    // + cadre + anneaux (horloge + filet court ajoutés à part). Mêmes options
+    // utilisées à la reconstruction (_setGoldThickness).
+    const FRONT_GOLD_OPTS = { rings:false };
+    const BACK_GOLD_OPTS  = { rings:true  };
+
+    // Groupe extérieur (frontGold/backGold) séparé du sous-groupe d'ornements
+    // (frontOrnaments/backOrnaments) : on peut reconstruire juste les barres/
+    // anneaux (changement de "grosseur") sans supprimer les chiffres romains ni
+    // les aiguilles d'horloge, ajoutés plus tard comme AUTRES enfants du même
+    // groupe extérieur.
+    let goldThicknessScale = 1;
+    let frontOrnaments = buildGoldOrnaments(goldThicknessScale, FRONT_GOLD_OPTS);
+    const frontGold = new THREE.Group();
+    frontGold.add(frontOrnaments);
     frontGold.position.set(halfW,0,0);
     frontPivot.add(frontGold);
 
-    const backGold=buildGoldOrnaments();
+    let backOrnaments = buildGoldOrnaments(goldThicknessScale, BACK_GOLD_OPTS);
+    const backGold = new THREE.Group();
+    backGold.add(backOrnaments);
     backGold.position.set(halfW,0,0);
     backGold.rotation.y=Math.PI; // face vers l'extérieur arrière
     backPivot.add(backGold);
+    // +0.10 : dégage aussi les chiffres romains (posés à circleR0+0.062, hauteur
+    // de texte ~0.036), pas juste l'anneau lui-même.
+    buildTitleRules(backGold, circleR0 + 0.10, circleR0 + 0.10);
 
-    // Chiffres romains (ajoutés aux deux couvertures au chargement de la police)
+    // Chiffres romains : dos uniquement (horloge retirée du devant). "CODEX" en
+    // dorure, centré, à la place sur la couverture avant.
     new FontLoader().load('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/optimer_bold.typeface.json', (font) => {
-        [frontGold,backGold].forEach(group => {
-            ['XII','I','II','III','IV','V','VI','VII','VIII','IX','X','XI'].forEach((label,i) => {
-                const a=Math.PI/2-(i/12)*Math.PI*2;
-                const geo=new TextGeometry(label,{font,size:0.036,height:0.010,curveSegments:4});
-                geo.computeBoundingBox(); const bb=geo.boundingBox;
-                geo.translate(-(bb.max.x-bb.min.x)/2,-(bb.max.y-bb.min.y)/2,0);
-                const mesh=new THREE.Mesh(geo,matGold);
-                mesh.position.set(Math.cos(a)*(circleR0+0.062),Math.sin(a)*(circleR0+0.062),CT+0.001);
-                group.add(mesh);
-            });
+        ['XII','I','II','III','IV','V','VI','VII','VIII','IX','X','XI'].forEach((label,i) => {
+            const a=Math.PI/2-(i/12)*Math.PI*2;
+            // bevelEnabled:false partout où TextGeometry est utilisé dans ce fichier : le
+            // bevel par défaut de ExtrudeGeometry (~0.1 d'épaisseur) est dimensionné pour
+            // un texte de taille normale (ex. size:80) — sur ce texte minuscule (size
+            // 0.036-0.16) il dévore la lettre et donne un bord déchiqueté ("écorché") de près.
+            const geo=new TextGeometry(label,{font,size:0.036,height:0.010,curveSegments:4,bevelEnabled:false});
+            geo.computeBoundingBox(); const bb=geo.boundingBox;
+            geo.translate(-(bb.max.x-bb.min.x)/2,-(bb.max.y-bb.min.y)/2,0);
+            const mesh=new THREE.Mesh(geo,matGold);
+            mesh.position.set(Math.cos(a)*(circleR0+0.062),Math.sin(a)*(circleR0+0.062),CT+0.001);
+            backGold.add(mesh);
         });
     });
 
-    // ─── Dorures du spine (face extérieure) ───────────────────────────────────
-    const SD=D+CT*2, spineFaceX=-(W/2+CT)-0.004, sT=0.006, sArm=0.07;
-    const spineGold=new THREE.Group(); book.add(spineGold);
-    // Coins (équerres)
-    [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([sz_,sy]) => {
-        const zEdge=sz_*(SD/2-0.012), yEdge=sy*(topY-0.012);
-        const zBar=new THREE.Mesh(new THREE.BoxGeometry(sT,sT,sArm),matGold);
-        zBar.position.set(spineFaceX, yEdge, zEdge-sz_*sArm/2); spineGold.add(zBar);
-        const yBar=new THREE.Mesh(new THREE.BoxGeometry(sT,sArm,sT),matGold);
-        yBar.position.set(spineFaceX, yEdge-sy*sArm/2, zEdge); spineGold.add(yBar);
-    });
-    // Filets haut/bas + losanges (mêmes proportions que la texture SVG)
-    [-(topY*0.867),topY*0.867].forEach(ry => {
-        const rule=new THREE.Mesh(new THREE.BoxGeometry(sT,sT,SD-0.05),matGold);
-        rule.position.set(spineFaceX,ry,0); spineGold.add(rule);
-        const d=new THREE.Mesh(new THREE.BoxGeometry(0.012,0.035,0.035),matGold);
-        d.rotation.x=Math.PI/4; d.position.set(spineFaceX,ry,0); spineGold.add(d);
+    // "CODEX", couverture avant : police serif gravée (gentilis, pas la sans-serif
+    // géométrique des chiffres romains) — plus proche du cuir/or gravé que
+    // l'Optimer utilisé ailleurs. Filet court (buildTitleRules) ajusté à la
+    // largeur/hauteur réelle du texte une fois la police chargée.
+    new FontLoader().load('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/gentilis_bold.typeface.json', (font) => {
+        const codexGeo=new TextGeometry('CODEX',{font,size:0.16,height:0.014,curveSegments:6,bevelEnabled:false});
+        codexGeo.computeBoundingBox(); const cbb=codexGeo.boundingBox;
+        const textW=cbb.max.x-cbb.min.x, textH=cbb.max.y-cbb.min.y;
+        codexGeo.translate(-textW/2,-textH/2,0);
+        const codexMesh=new THREE.Mesh(codexGeo,matGold);
+        codexMesh.position.set(0,0,CT+0.002);
+        frontGold.add(codexMesh);
+        buildTitleRules(frontGold, textW / 2, textH / 2);
     });
 
+    // ─── Vibe "trou noir" au centre du cadran (dos uniquement) ─────────────────
+    // Jusqu'ici le centre de l'horloge laissait juste transparaître la texture
+    // galaxie. Un disque noir plein + un mince anneau lumineux ambré à son bord
+    // (écho de l'anneau de photons) donnent une vraie silhouette de trou noir —
+    // le ciel/la nébuleuse restent visibles seulement entre les deux anneaux dorés.
+    const bhDiscR = circleR1 * 0.94;
+    const bhDisc = new THREE.Mesh(new THREE.CircleGeometry(bhDiscR, 48), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    bhDisc.position.set(0, 0, circleZ + 0.001);
+    backGold.add(bhDisc);
+    const bhGlow = new THREE.Mesh(new THREE.TorusGeometry(bhDiscR, 0.003, 8, 64), new THREE.MeshBasicMaterial({ color: 0xffddaa }));
+    bhGlow.position.set(0, 0, circleZ + 0.002);
+    backGold.add(bhGlow);
 
+    // Rosace/guilloché : fins rayons sur le disque noir, entre celui-ci et les
+    // aiguilles (z intermédiaire) — comble le vide central plat et double comme
+    // motif "structure d'accrétion" cohérent avec la vibe trou noir. Matériau
+    // dédié (semi-transparent, pas matGold) : la première version était trop
+    // marquée — plus fin ET translucide pour rester discret quel que soit
+    // l'angle/éclairage, plutôt que de deviner un seul curseur à ajuster.
+    const matRosette = new THREE.MeshStandardMaterial({ color:0xffffff, roughness:0.30, metalness:0.55, emissive:0xffffff, emissiveIntensity:0.15, transparent:true, opacity:0.35 });
+    function buildRosette(radius, count) {
+        const g = new THREE.Group();
+        for (let i = 0; i < count; i++) {
+            const spokeGeo = new THREE.BoxGeometry(0.0014, radius, 0.006);
+            spokeGeo.translate(0, radius / 2, 0); // base au centre, comme les aiguilles
+            const spoke = new THREE.Mesh(spokeGeo, matRosette);
+            spoke.rotation.z = (i / count) * Math.PI * 2;
+            g.add(spoke);
+        }
+        g.position.set(0, 0, circleZ + 0.005);
+        return g;
+    }
+    backGold.add(buildRosette(bhDiscR * 0.88, 24));
+
+    // ─── Aiguilles d'horloge (heure réelle, 3 aiguilles dorées) ────────────────
+    // Remplace le point lumineux central par une vraie horloge. Base de chaque
+    // aiguille translatée à l'origine locale (le pivot), pas positionnée à
+    // distance — sinon rotation.z tournerait autour du CENTRE de l'aiguille,
+    // pas autour du pivot de l'horloge.
+    function makeHand(length, width, depth, z) {
+        const geo = new THREE.BoxGeometry(width, length, depth);
+        geo.translate(0, length / 2, 0); // base au pivot, pointe vers +Y (= XII)
+        const mesh = new THREE.Mesh(geo, matGold);
+        mesh.position.set(0, 0, z);
+        return mesh;
+    }
+    function buildClockHands() {
+        const g = new THREE.Group();
+        const hourHand   = makeHand(circleR1 * 0.52, 0.016, 0.012, circleZ + 0.009);
+        const minuteHand = makeHand(circleR1 * 0.78, 0.010, 0.012, circleZ + 0.011);
+        const secondHand = makeHand(circleR1 * 0.85, 0.005, 0.012, circleZ + 0.013);
+        g.add(hourHand, minuteHand, secondHand);
+        const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.016, 20), matGold);
+        cap.rotation.x = Math.PI / 2; cap.position.set(0, 0, circleZ + 0.012); g.add(cap);
+        return { group: g, hourHand, minuteHand, secondHand };
+    }
+    // Horloge : dos uniquement.
+    const backClock = buildClockHands(); backGold.add(backClock.group);
+
+    // rotation.z=0 pointe vers +Y (position de XII) ; angle négatif = sens horaire
+    // vu de face — même convention que le placement des chiffres romains ci-dessus.
+    function updateClockHands() {
+        const now = new Date();
+        const h = (now.getHours() % 12) + now.getMinutes() / 60;
+        const m = now.getMinutes() + now.getSeconds() / 60;
+        const s = now.getSeconds() + now.getMilliseconds() / 1000;
+        backClock.hourHand.rotation.z   = -(h / 12) * Math.PI * 2;
+        backClock.minuteHand.rotation.z = -(m / 60) * Math.PI * 2;
+        backClock.secondHand.rotation.z = -(s / 60) * Math.PI * 2;
+    }
+    updateClockHands();
+
+    // ─── Dorures du spine (face extérieure) ────────────────────────────────────
+    // Même logique groupe-extérieur/sous-groupe que front/backGold : spineGold
+    // porte juste le décalage de position (spineFaceX), spineOrnaments est le
+    // sous-groupe reconstruit quand la "grosseur" change.
+    const SD=D+CT*2, spineFaceX=-(W/2+CT)-0.004, sArm=0.07;
+    function buildSpineOrnaments(scale) {
+        const sT=0.006*scale;
+        const g=new THREE.Group();
+        // Coins (équerres)
+        [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([sz_,sy]) => {
+            const zEdge=sz_*(SD/2-0.012), yEdge=sy*(topY-0.012);
+            const zBar=new THREE.Mesh(new THREE.BoxGeometry(sT,sT,sArm),matGold);
+            zBar.position.set(0, yEdge, zEdge-sz_*sArm/2); g.add(zBar);
+            const yBar=new THREE.Mesh(new THREE.BoxGeometry(sT,sArm,sT),matGold);
+            yBar.position.set(0, yEdge-sy*sArm/2, zEdge); g.add(yBar);
+        });
+        // Filets haut/bas + losanges (mêmes proportions que la texture SVG)
+        [-(topY*0.867),topY*0.867].forEach(ry => {
+            const rule=new THREE.Mesh(new THREE.BoxGeometry(sT,sT,SD-0.05),matGold);
+            rule.position.set(0,ry,0); g.add(rule);
+            const dw=0.012*scale, dh=0.035*scale;
+            const d=new THREE.Mesh(new THREE.BoxGeometry(dw,dh,dh),matGold);
+            d.rotation.x=Math.PI/4; d.position.set(0,ry,0); g.add(d);
+        });
+        return g;
+    }
+    let spineOrnaments = buildSpineOrnaments(goldThicknessScale);
+    const spineGold = new THREE.Group();
+    spineGold.position.set(spineFaceX,0,0);
+    spineGold.add(spineOrnaments);
+    book.add(spineGold);
+
+    // ─── Devise sur la tranche, police convertie (Cinzel Bold) ─────────────────
+    // Cinzel n'existe pas dans le jeu de polices three.js prêtes à l'emploi
+    // (optimer/gentilis/...) : convertie hors-session depuis le TTF officiel
+    // (Google Fonts) via opentype.js, même schéma JSON que FontLoader attend
+    // (glyphs/o/ha/resolution) — script réutilisable pour d'autres polices.
+    // book/fonts/cinzel_bold.typeface.json ne contient que MAJUSCULES + espace
+    // (suffisant pour cette devise).
+    new FontLoader().load('book/fonts/cinzel_bold.typeface.json', (font) => {
+        const mottoGeo = new TextGeometry('PRO OPTIMO PRO IMPERIO', { font, size: 0.12, height: 0.010, curveSegments: 6, bevelEnabled: false });
+        mottoGeo.computeBoundingBox(); const mbb = mottoGeo.boundingBox;
+        mottoGeo.translate(-(mbb.max.x - mbb.min.x) / 2, -(mbb.max.y - mbb.min.y) / 2, 0);
+        const mottoMesh = new THREE.Mesh(mottoGeo, matGold);
+        // Le texte est plat dans son plan XY local (face = +Z, lecture = +X). La
+        // tranche est étroite et haute : orientée pour lire de haut en bas le
+        // long de la hauteur du livre (Y monde), face tournée vers l'extérieur
+        // (-X monde). Base orthonormée directe (Y=Z×X vérifié) : pas de miroir.
+        const basis = new THREE.Matrix4().makeBasis(
+            new THREE.Vector3(0, -1, 0), // lecture (local +X) -> vers le bas (monde -Y)
+            new THREE.Vector3(0, 0, 1),  // haut du glyphe (local +Y) -> monde +Z
+            new THREE.Vector3(-1, 0, 0)  // face du texte (local +Z) -> vers l'extérieur (monde -X)
+        );
+        mottoMesh.quaternion.setFromRotationMatrix(basis);
+        spineGold.add(mottoMesh);
+    });
+
+    // ─── Debug : couleur & grosseur des dorures ────────────────────────────────
+    // Couleur : simple propriété matériau, pas besoin de reconstruire la géométrie.
+    // Couleur ET emissive : sans ça, choisir une autre couleur retomberait dans le
+    // même défaut (gris selon l'éclairage) que celui corrigé ci-dessus pour le blanc.
+    window._setGoldColor = (hex) => { matGold.color.set(hex); matGold.emissive.set(hex); matRosette.color.set(hex); matRosette.emissive.set(hex); };
+    window._setGoldMetalness = (v) => { matGold.metalness = v; matRosette.metalness = v; };
+    // Grosseur : reconstruit uniquement les sous-groupes d'ornements (pas les
+    // chiffres romains ni les aiguilles d'horloge, enfants directs de front/backGold).
+    window._setGoldThickness = (scale) => {
+        goldThicknessScale = scale;
+        frontGold.remove(frontOrnaments);
+        frontOrnaments.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+        frontOrnaments = buildGoldOrnaments(scale, FRONT_GOLD_OPTS);
+        frontGold.add(frontOrnaments);
+
+        backGold.remove(backOrnaments);
+        backOrnaments.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+        backOrnaments = buildGoldOrnaments(scale, BACK_GOLD_OPTS);
+        backGold.add(backOrnaments);
+
+        spineGold.remove(spineOrnaments);
+        spineOrnaments.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+        spineOrnaments = buildSpineOrnaments(scale);
+        spineGold.add(spineOrnaments);
+    };
 
     // ─── Feuilles WebGL ───────────────────────────────────────────────────────
 
     const PAGE_TEXTURES = [
-        ['book/images/1.png',  'book/images/2.png' ], // feuille 1  : pages 1 / 2
-        ['book/images/3.png',  'book/images/4.png' ], // feuille 2  : pages 3 / 4
-        ['book/images/5.png',  'book/images/6.png' ], // feuille 3  : pages 5 / 6
-        ['book/images/7.png',  'book/images/8.png' ], // feuille 4  : pages 7 / 8 (8 = trou noir gauche)
-        ['book/images/9.png',  'book/images/10.png'], // feuille 5  : pages 9 / 10 (9 = trou noir droite)
-        ['book/images/11.png', 'book/images/12.png'], // feuille 6  : pages 11 / 12
-        ['book/images/13.png', 'book/images/14.png'], // feuille 7  : pages 13 / 14
-        ['book/images/15.png', 'book/images/16.png'], // feuille 8  : pages 15 / 16
-        ['book/images/17.png', 'book/images/18.png'], // feuille 9  : pages 17 / 18
-        ['book/images/19.png', null                ], // feuille 10 : pages 19 / 20 (19 = affiche, 20 vide → placeholder)
+        ['book/images-web/1.webp',  'book/images-web/2.webp' ], // feuille 1  : pages 1 / 2
+        ['book/images-web/3.webp',  'book/images-web/4.webp' ], // feuille 2  : pages 3 / 4
+        ['book/images-web/5.webp',  'book/images-web/6.webp' ], // feuille 3  : pages 5 / 6
+        ['book/images-web/7.webp',  'book/images-web/8.webp' ], // feuille 4  : pages 7 / 8
+        ['book/images-web/9.webp',  'book/images-web/10.webp'], // feuille 5  : pages 9 / 10
+        ['book/images-web/11.webp', 'book/images-web/12.webp'], // feuille 6  : pages 11 / 12
+        ['book/images-web/13.webp', 'book/images-web/14.webp'], // feuille 7  : pages 13 / 14
+        ['book/images-web/15.webp', 'book/images-web/16.webp'], // feuille 8  : pages 15 / 16
+        ['book/images-web/17.webp', 'book/images-web/18.webp'], // feuille 9  : pages 17 / 18
+        ['book/images-web/19.webp', 'book/images-web/20.webp'], // feuille 10 : pages 19 / 20
+        ['book/images-web/21.webp', 'book/images-web/22.webp'], // feuille 11 : pages 21 / 22
+        ['book/images-web/23.webp', 'book/images-web/24.webp'], // feuille 12 : pages 23 / 24 (24 = trou noir gauche)
+        ['book/images-web/25.webp', 'book/images-web/26.webp'], // feuille 13 : pages 25 / 26 (25 = trou noir droite)
+        ['book/images-web/27.webp', 'book/images-web/28.webp'], // feuille 14 : pages 27 / 28
+        ['book/images-web/29.webp', 'book/images-web/30.webp'], // feuille 15 : pages 29 / 30
+        ['book/images-web/31.webp', 'book/images-web/32.webp'], // feuille 16 : pages 31 / 32
+        ['book/images-web/33.webp', 'book/images-web/34.webp'], // feuille 17 : pages 33 / 34
+        ['book/images-web/35.webp', null                ], // feuille 18 : pages 35 / 36 (36 vide → placeholder)
     ];
 
     function makePagePlaceholderTex(pageNum, side) {
@@ -391,14 +737,31 @@ export async function initBook(scene, renderer) {
         return new THREE.CanvasTexture(cv);
     }
 
-    const _texLoader=new THREE.TextureLoader();
+    // Les pages viennent de book/images-web/ (.webp, ≤2048px, générées à
+    // partir des PNG sources 4096×6144 de book/images/ — ceux-là restent
+    // intacts pour le téléchargement PDF, cf. README.md). MAX_TEX_DIM reste
+    // un filet de sécurité : si un fichier plus lourd atterrit un jour dans
+    // ce dossier, on le redessine quand même dans un canvas réduit avant de
+    // créer la texture, plutôt que de resaturer la VRAM (lag observé côté
+    // BUT II avant ce passage en WebP, cf. session du 2026-09-13).
+    const MAX_TEX_DIM = 2048;
+    const _imgLoader = new THREE.ImageLoader();
     function _loadTex(path, fallback) {
         if (!path) return fallback();
-        // initTexture force l'upload GPU dès le chargement (évite le freeze au milieu du flip)
-        const t=_texLoader.load(path, (tex)=>renderer.initTexture(tex));
-        t.colorSpace=THREE.SRGBColorSpace;
-        t.anisotropy=renderer.capabilities.getMaxAnisotropy();
-        return t;
+        const canvas = document.createElement('canvas');
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        _imgLoader.load(path, (img) => {
+            const scale = Math.min(1, MAX_TEX_DIM / Math.max(img.width, img.height));
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            tex.needsUpdate = true;
+            // initTexture force l'upload GPU dès le chargement (évite le freeze au milieu du flip)
+            renderer.initTexture(tex);
+        });
+        return tex;
     }
 
     const SPINE_X=-0.57, PAGE_Z=0.000, PAGE_EXT=0.12;
@@ -407,9 +770,9 @@ export async function initBook(scene, renderer) {
         verso:_loadTex(vPath,()=>makePagePlaceholderTex(i*2+2,'verso'))
     }));
     // Page 0 (page de garde) : affichée sur la page de gauche du premier spread
-    const tex0=_loadTex('book/images/0.png',()=>makePagePlaceholderTex(0,'verso'));
+    const tex0=_loadTex('book/images-web/0.webp',()=>makePagePlaceholderTex(0,'verso'));
     // Liste ordonnée des pages réelles (0,1,2,...) pour la génération du PDF côté client
-    window._pageImagePaths=['book/images/0.png',...PAGE_TEXTURES.flat().filter(Boolean)];
+    window._pageImagePaths=['book/images-web/0.webp',...PAGE_TEXTURES.flat().filter(Boolean)];
 
     let spreadIndex=0, isFlipping=false;
     let FOLD_ANGLE=10*Math.PI/180, TILT_ANGLE=90*Math.PI/180;
@@ -447,7 +810,11 @@ export async function initBook(scene, renderer) {
 
     function _applyFold() { leftGroup.rotation.y=FOLD_ANGLE+TILT_ANGLE; rightGroup.rotation.y=-FOLD_ANGLE+TILT_ANGLE; }
     function _updateStaticPages() {
-        leftMat.map=spreadIndex>0?leafTextures[spreadIndex-1].verso:tex0; leftMat.needsUpdate=true; leftGroup.visible=true;
+        leftMat.map=spreadIndex>0?leafTextures[spreadIndex-1].verso:tex0; leftMat.needsUpdate=true;
+        // Nombre de pages impair (35) : la dernière feuille n'a pas de verso réel
+        // (PAGE_TEXTURES[...][1] === null) — sans ce garde-fou, la texture de
+        // remplacement ("Page 36 / verso") s'affichait comme une vraie page.
+        leftGroup.visible = !(spreadIndex>0 && !PAGE_TEXTURES[spreadIndex-1][1]);
         rightMat.map=spreadIndex<leafTextures.length?leafTextures[spreadIndex].recto:null; rightMat.needsUpdate=true; rightGroup.visible=spreadIndex<leafTextures.length;
         _applyFold();
     }
@@ -459,15 +826,44 @@ export async function initBook(scene, renderer) {
     function showLeaves() { _updateStaticPages(); updatePageIndicator(); }
     function hideLeaves() { spreadIndex=0; isFlipping=false; leftGroup.visible=rightGroup.visible=animGroup.visible=false; }
 
+    // Variante "porte qui clignote" (prototype, 2026-09-13) : quand la page 31
+    // est affichée, bascule brièvement vers 31-1.png à des intervalles
+    // aléatoires — un vrai clignotement, pas un cycle régulier. Page 31 =
+    // leafTextures[15].recto (feuille 16), affichée sur rightMat.
+    const tex31Alt = _loadTex('book/images-web/31-1.webp', () => null);
+    function scheduleFlicker31() {
+        const wait = 2000 + Math.random() * 5000; // 2 à 7 s avant le prochain clignotement
+        setTimeout(() => {
+            if (spreadIndex === 15 && !isFlipping && rightGroup.visible && tex31Alt) {
+                rightMat.map = tex31Alt; rightMat.needsUpdate = true;
+                setTimeout(() => {
+                    if (spreadIndex === 15) { rightMat.map = leafTextures[15].recto; rightMat.needsUpdate = true; }
+                    scheduleFlicker31();
+                }, 60 + Math.random() * 120); // durée du flash
+            } else {
+                scheduleFlicker31();
+            }
+        }, wait);
+    }
+    scheduleFlicker31();
+
+    // Dernière feuille sans verso réel (nombre de pages impair, page 35 =
+    // dernier contenu) : inutile d'aller plus loin, il n'y a rien derrière —
+    // sans ça "Suivant" menait à un état "après la fin" totalement vide.
+    const _lastLeafHasNoVerso = !PAGE_TEXTURES[leafTextures.length-1][1];
+    const _maxSpread = _lastLeafHasNoVerso ? leafTextures.length-1 : leafTextures.length;
+
     function flipForward() {
-        if(isFlipping||spreadIndex>=leafTextures.length)return; isFlipping=true;
+        if(isFlipping||spreadIndex>=_maxSpread)return; isFlipping=true;
         const recto=leafTextures[spreadIndex].recto, verso=leafTextures[spreadIndex].verso;
         animMat.map=recto; animMat.needsUpdate=true; animMesh.position.x=(W+PAGE_EXT)/2;
+        animGroup.position.z=rightGroup.position.z; // même profondeur que la page statique remplacée (évite le décalage au début du flip)
         animGroup.rotation.y=-FOLD_ANGLE+TILT_ANGLE; animGroup.visible=true; rightGroup.visible=false;
         if(spreadIndex+1<leafTextures.length){rightMat.map=leafTextures[spreadIndex+1].recto;rightMat.needsUpdate=true;rightGroup.visible=true;}else{rightGroup.visible=false;}
         gsap.delayedCall(0.80,()=>{leftMat.map=verso;leftMat.needsUpdate=true;leftGroup.visible=true;});
         gsap.to(animGroup.rotation,{y:TILT_ANGLE-Math.PI/2,duration:0.64,ease:'power2.in',onComplete(){
             animMat.map=verso;animMat.needsUpdate=true;animMesh.position.x=-(W+PAGE_EXT)/2;animGroup.rotation.y=TILT_ANGLE+Math.PI/2;
+            animGroup.position.z=leftGroup.position.z; // bascule vers la profondeur de la page de gauche (destination)
             gsap.to(animGroup.rotation,{y:FOLD_ANGLE+TILT_ANGLE,duration:0.64,ease:'power2.out',onComplete(){spreadIndex++;animGroup.visible=false;animMesh.position.x=(W+PAGE_EXT)/2;_updateStaticPages();isFlipping=false;updatePageIndicator();}});
         }});
     }
@@ -476,11 +872,14 @@ export async function initBook(scene, renderer) {
         if(isFlipping||spreadIndex<=0)return; isFlipping=true; spreadIndex--;
         const verso=leafTextures[spreadIndex].verso, recto=leafTextures[spreadIndex].recto;
         animMat.map=verso;animMat.needsUpdate=true;animMesh.position.x=-(W+PAGE_EXT)/2;
+        animGroup.position.z=leftGroup.position.z; // même profondeur que la page statique remplacée (évite le décalage au début du flip)
         animGroup.rotation.y=FOLD_ANGLE+TILT_ANGLE;animGroup.visible=true;leftGroup.visible=false;
-        leftMat.map=spreadIndex>0?leafTextures[spreadIndex-1].verso:tex0;leftMat.needsUpdate=true;leftGroup.visible=true;
+        leftMat.map=spreadIndex>0?leafTextures[spreadIndex-1].verso:tex0;leftMat.needsUpdate=true;
+        leftGroup.visible = !(spreadIndex>0 && !PAGE_TEXTURES[spreadIndex-1][1]);
         gsap.delayedCall(0.80,()=>{rightMat.map=recto;rightMat.needsUpdate=true;rightGroup.visible=true;});
         gsap.to(animGroup.rotation,{y:TILT_ANGLE+Math.PI/2,duration:0.64,ease:'power2.in',onComplete(){
             animMat.map=recto;animMat.needsUpdate=true;animMesh.position.x=(W+PAGE_EXT)/2;animGroup.rotation.y=TILT_ANGLE-Math.PI/2;
+            animGroup.position.z=rightGroup.position.z; // bascule vers la profondeur de la page de droite (destination)
             gsap.to(animGroup.rotation,{y:-FOLD_ANGLE+TILT_ANGLE,duration:0.64,ease:'power2.out',onComplete(){animGroup.visible=false;animMesh.position.x=(W+PAGE_EXT)/2;_updateStaticPages();isFlipping=false;updatePageIndicator();}});
         }});
     }
@@ -488,7 +887,11 @@ export async function initBook(scene, renderer) {
     // ─── GSAP animations ──────────────────────────────────────────────────────
 
     let isOpen=false;
-    const introTl=gsap.timeline({delay:0.3});
+    // repeat:-1 — le livre doit rester visiblement 3D/vivant tant que
+    // personne n'y touche, y compris pendant une longue attente sur le
+    // preloader ; la séquence revient pile à 0 à la fin, donc la boucle est
+    // sans à-coup. Tuée au premier drag (drag.js) ou à l'ouverture (plus bas).
+    const introTl=gsap.timeline({delay:0.3, repeat:-1});
     introTl.to(book.rotation,{y:0.65,duration:2.2,ease:'power2.inOut'})
            .to(book.rotation,{y:-0.45,duration:2.8,ease:'power2.inOut'})
            .to(book.rotation,{y:0.0,duration:1.6,ease:'power2.out'});
@@ -534,6 +937,25 @@ export async function initBook(scene, renderer) {
 
     // ─── Update (appelé chaque frame) ─────────────────────────────────────────
 
+    // Dérive lente et autonome de la galaxie, indépendante de la rotation du
+    // livre — donne un effet vivant même quand le livre ne bouge pas. Le SENS
+    // de la dérive suit le dernier sens de rotation du livre (mémorisé tant
+    // qu'on ne tourne pas dans l'autre sens) plutôt que d'être fixe.
+    //
+    // BORNE EN VA-ET-VIENT (pas de modulo libre) : milkyway.jpg est une vraie
+    // photo, pas une texture raccord — si galaxyDriftTime dérivait sans limite
+    // dans un sens, u finirait par boucler un tour complet (u = uUCenter +
+    // ... + uParallax*uSpan, wrap par fract() dans le fragment shader), et le
+    // bord gauche de la photo ne ressemble pas à son bord droit : ça se voyait
+    // comme un "reset" brutal (~ toutes les 5-6 min à la vitesse actuelle, cf.
+    // uSpan ≈ 0.247 → 1/uSpan ≈ 4.05 unités avant de boucler). La borne est
+    // choisie confortablement sous ce seuil, marge gardée pour la contribution
+    // de book.rotation.y*0.15 ci-dessous.
+    const GALAXY_DRIFT_BOUND = 1.5;
+    let galaxyDriftTime = 0;
+    let galaxyDriftDir = 1;
+    let _lastBookRotY = 0;
+
     function updateBook() {
         book.rotation.y+=(targetRot.y-book.rotation.y)*0.08;
         book.rotation.x+=(targetRot.x-book.rotation.x)*0.08;
@@ -541,6 +963,15 @@ export async function initBook(scene, renderer) {
         _spineEdgeWorld.copy(_spineEdgeLocal).applyMatrix4(book.matrixWorld);
         _spineNormalWorld.copy(_spineNormalLocal).transformDirection(book.matrixWorld).normalize();
         spineClipPlane.setFromNormalAndCoplanarPoint(_spineNormalWorld,_spineEdgeWorld);
+        updateClockHands();
+        const rotDelta = book.rotation.y - _lastBookRotY;
+        _lastBookRotY = book.rotation.y;
+        if (Math.abs(rotDelta) > 0.00005) galaxyDriftDir = Math.sign(rotDelta);
+        galaxyDriftTime += 0.0002 * galaxyDriftDir;
+        if (galaxyDriftTime > GALAXY_DRIFT_BOUND)       { galaxyDriftTime = GALAXY_DRIFT_BOUND;  galaxyDriftDir = -1; }
+        else if (galaxyDriftTime < -GALAXY_DRIFT_BOUND) { galaxyDriftTime = -GALAXY_DRIFT_BOUND; galaxyDriftDir = 1; }
+        galaxyParallax.value  = book.rotation.y * 0.15 + galaxyDriftTime; // même décalage sur les 3 faces, garde la continuité
+        galaxyParallaxV.value = book.rotation.x * 0.5;  // sens haut/bas, séparé (rotation.x est un angle plus petit)
     }
 
     // Globals pour les scripts non-module (debug panel, navigation)
@@ -550,6 +981,60 @@ export async function initBook(scene, renderer) {
     window._setFold=(rad)=>{ FOLD_ANGLE=rad; _applyFold(); };
     window._setTilt=(rad)=>{ TILT_ANGLE=rad; _applyFold(); };
     window._getSpread=()=>({spreadIndex,isFlipping});
+    // Saut vers une page lointaine (sommaire) : PAS un vrai feuilletage
+    // page par page (beaucoup trop long jusqu'à la page 34), mais pas un
+    // téléport instantané non plus — un seul flip, avec la page ACTUELLE
+    // comme visuel de la page qui tourne (son contenu réel n'a pas
+    // d'importance ici, seul le mouvement compte), qui atterrit directement
+    // sur le contenu de la page cible. Donne l'illusion de tourner une page.
+    window._jumpToSpread=(target)=>{
+        target=Math.max(0,Math.min(target,leafTextures.length));
+        if(isFlipping) return;
+        if(target===spreadIndex){ showLeaves(); return; }
+        isFlipping=true;
+        const recto=leafTextures[spreadIndex].recto, verso=leafTextures[spreadIndex].verso;
+        if(target>spreadIndex){
+            animMat.map=recto; animMat.needsUpdate=true; animMesh.position.x=(W+PAGE_EXT)/2;
+            animGroup.position.z=rightGroup.position.z;
+            animGroup.rotation.y=-FOLD_ANGLE+TILT_ANGLE; animGroup.visible=true; rightGroup.visible=false;
+            if(target<leafTextures.length){rightMat.map=leafTextures[target].recto;rightMat.needsUpdate=true;rightGroup.visible=true;}else{rightGroup.visible=false;}
+            gsap.delayedCall(0.80,()=>{
+                leftMat.map=target>0?leafTextures[target-1].verso:tex0; leftMat.needsUpdate=true;
+                leftGroup.visible=!(target>0 && !PAGE_TEXTURES[target-1][1]);
+            });
+            gsap.to(animGroup.rotation,{y:TILT_ANGLE-Math.PI/2,duration:0.64,ease:'power2.in',onComplete(){
+                // La face qui atterrit doit montrer le VRAI contenu de la page
+                // cible (pas celui de la page de départ), sinon on voit un saut
+                // net au moment où animGroup disparaît et laisse place à la
+                // page statique (qui, elle, montre déjà la bonne image).
+                animMat.map=target>0?leafTextures[target-1].verso:tex0;animMat.needsUpdate=true;animMesh.position.x=-(W+PAGE_EXT)/2;animGroup.rotation.y=TILT_ANGLE+Math.PI/2;
+                animGroup.position.z=leftGroup.position.z;
+                gsap.to(animGroup.rotation,{y:FOLD_ANGLE+TILT_ANGLE,duration:0.64,ease:'power2.out',onComplete(){
+                    spreadIndex=target; animGroup.visible=false; animMesh.position.x=(W+PAGE_EXT)/2; _updateStaticPages(); isFlipping=false; updatePageIndicator();
+                }});
+            }});
+        } else {
+            animMat.map=verso;animMat.needsUpdate=true;animMesh.position.x=-(W+PAGE_EXT)/2;
+            animGroup.position.z=leftGroup.position.z;
+            animGroup.rotation.y=FOLD_ANGLE+TILT_ANGLE; animGroup.visible=true; leftGroup.visible=false;
+            leftMat.map=target>0?leafTextures[target-1].verso:tex0; leftMat.needsUpdate=true;
+            leftGroup.visible=!(target>0 && !PAGE_TEXTURES[target-1][1]);
+            gsap.delayedCall(0.80,()=>{
+                rightMat.map=target<leafTextures.length?leafTextures[target].recto:null; rightMat.needsUpdate=true;
+                rightGroup.visible=target<leafTextures.length;
+            });
+            gsap.to(animGroup.rotation,{y:TILT_ANGLE+Math.PI/2,duration:0.64,ease:'power2.in',onComplete(){
+                // Même correctif que la branche avant : la face qui atterrit
+                // montre le vrai recto de la page cible, pas celui de la page
+                // de départ, pour un raccord invisible avec la page statique.
+                animMat.map=target<leafTextures.length?leafTextures[target].recto:null;animMat.needsUpdate=true;animMesh.position.x=(W+PAGE_EXT)/2;animGroup.rotation.y=TILT_ANGLE-Math.PI/2;
+                animGroup.position.z=rightGroup.position.z;
+                gsap.to(animGroup.rotation,{y:-FOLD_ANGLE+TILT_ANGLE,duration:0.64,ease:'power2.out',onComplete(){
+                    spreadIndex=target; animGroup.visible=false; animMesh.position.x=(W+PAGE_EXT)/2; _updateStaticPages(); isFlipping=false; updatePageIndicator();
+                }});
+            }});
+        }
+    };
 
     return { book, updateBook, flipForward, flipBack, introTl, targetRot, frontPivot, backPivot, frontPages, backPages };
 }

@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Aucune IA n'a été maltraitée durant la création de ce site.
+#     -- Claude

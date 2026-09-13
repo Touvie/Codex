@@ -19,7 +19,9 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
     transition: all 0.4s, opacity 0.5s ease;
     z-index: 5;
 }
-#btn:hover { background: rgba(201,168,76,0.12); border-color: rgba(201,168,76,0.9); color: #c9a84c; }
+/* Fond ET texte blancs au survol : le gold (#c9a84c) sur fond gold très
+   transparent se fondait avec le décor beige derrière (contraste quasi nul). */
+#btn:hover { background: rgba(244,239,228,0.15); border-color: rgba(244,239,228,0.9); color: #F4EFE4; }
 
 #hint {
     position: fixed;
@@ -63,6 +65,10 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
     letter-spacing: 1px;
 }
 #overlay-controls .book-nav-btn:hover { background: var(--accent); color: #1a1208; border-color: var(--accent); }
+/* Repris depuis l'ancien style inline (bloquait :hover, un style inline gagne
+   toujours contre une règle de classe) : "Fermer" reste plus discret que les
+   autres boutons par défaut, mais redevient normal au survol. */
+#overlay-close { border-color: rgba(191,161,129,0.25); color: rgba(191,161,129,0.5); }
 #page-indicator {
     font-family: 'Space Mono', monospace;
     font-size: 10px;
@@ -82,7 +88,7 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
 
 #debug-panel {
     position: fixed;
-    top: 16px; right: 16px;
+    top: 50%; left: 16px; transform: translateY(-50%);
     background: rgba(10,6,2,0.88);
     border: 1px solid rgba(191,161,129,0.35);
     color: rgba(191,161,129,0.9);
@@ -92,6 +98,8 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
     z-index: 99999;
     min-width: 280px;
     line-height: 1.5;
+    max-height: 92vh;
+    overflow-y: auto;
 }
 #debug-panel h4 { margin: 0; color: #c9a84c; letter-spacing: 2px; font-size: 10px; text-transform: uppercase; flex: 1; }
 #debug-panel .debug-header { display: flex; align-items: center; margin-bottom: 10px; }
