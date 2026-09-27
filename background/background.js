@@ -75,17 +75,48 @@ function visibleSizeAtZ(z) {
     return { w: h * _camera.aspect, h };
 }
 
+// Sous ce seuil, on considère qu'on est sur téléphone (portrait serré) — même
+// breakpoint que le HUD (book/style.css) et le mode focus (js/main.js).
+function isPhoneMode() { return window.innerWidth <= 768; }
+
+// Taille du plan pour un calque : par défaut on étire le plan aux dimensions
+// exactes du frustum (comportement bureau d'origine, jamais changé ici). Sur
+// téléphone, dès que la texture a fini de charger (layer._aspect connu), on
+// passe en mode "cover" : le plan garde le ratio NATUREL de l'image et
+// dépasse le cadre plutôt que de l'étirer — le décor peut alors être rogné
+// sur les bords, ce qui est assumé (le temple, au centre, reste intact).
+function computePlaneSize(layer) {
+    const { w, h } = visibleSizeAtZ(layer.z);
+    if (!isPhoneMode() || !layer._aspect) return { w: w * 1.15, h: h * 1.15 };
+    const frustumAspect = w / h;
+    if (layer._aspect > frustumAspect) {
+        const ph = h * 1.15;
+        return { w: ph * layer._aspect, h: ph };
+    }
+    const pw = w * 1.15;
+    return { w: pw, h: pw / layer._aspect };
+}
+
 export function initBackground(scene, camera) {
     _camera = camera;
 
     const loader = new THREE.TextureLoader();
 
     LAYERS.forEach((layer, i) => {
-        const tex = loader.load(IMG_PATH + layer.file);
+        let mesh; // assigné juste après le loader.load — le callback onLoad le référence via closure
+        const tex = loader.load(IMG_PATH + layer.file, (loadedTex) => {
+            layer._aspect = loadedTex.image.width / loadedTex.image.height;
+            if (!isPhoneMode()) return; // le rendu bureau ne dépend pas de layer._aspect, rien à refaire
+            const { w, h } = computePlaneSize(layer);
+            mesh.geometry.dispose();
+            const segsY = layer.segsY || 1;
+            const segsX = layer.segsY ? segsY : 1;
+            mesh.geometry = new THREE.PlaneGeometry(w, h, segsX, segsY);
+        });
         tex.minFilter = THREE.LinearFilter;
         tex.colorSpace = THREE.SRGBColorSpace;
 
-        const { w, h } = visibleSizeAtZ(layer.z);
+        const { w, h } = computePlaneSize(layer);
         const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
         _addInvertShader(mat);
         if (layer.sway !== undefined) _addSwayShader(mat, layer.sway);
@@ -94,7 +125,7 @@ export function initBackground(scene, camera) {
         // un enroulement lisse (twirl) dans la transition Oblivion v2, pas juste un
         // cisaillement à 2 points de large.
         const segsX = layer.segsY ? segsY : 1;
-        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.15, h * 1.15, segsX, segsY), mat);
+        mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h, segsX, segsY), mat);
         mesh.position.set(layer.x, layer.y, layer.z);
         mesh.renderOrder = i;
         mesh.userData.file = layer.file; // pour classifier le calque (léger/lourd) dans la transition Oblivion
@@ -110,11 +141,11 @@ export function initBackground(scene, camera) {
 
     window.addEventListener('resize', () => {
         _meshes.forEach((mesh, i) => {
-            const { w, h } = visibleSizeAtZ(LAYERS[i].z);
+            const { w, h } = computePlaneSize(LAYERS[i]);
             mesh.geometry.dispose();
             const segsY = LAYERS[i].segsY || 1;
             const segsX = LAYERS[i].segsY ? segsY : 1;
-            mesh.geometry = new THREE.PlaneGeometry(w * 1.15, h * 1.15, segsX, segsY);
+            mesh.geometry = new THREE.PlaneGeometry(w, h, segsX, segsY);
         });
     });
 

@@ -9,6 +9,9 @@ import { initBook } from '../book/book.js';
 import { initDrag } from '../book/drag.js';
 import { initOblivionTransition, BlackHoleDistortShader } from '../book/oblivion-transition.js';
 
+// Breakpoint partagé avec book/style.css (media query) et background/background.js.
+function isPhoneMode() { return window.innerWidth <= 768; }
+
 // ─── Splash de chargement ─────────────────────────────────────────────────
 // Le splash ne se débloque que quand DEUX conditions sont réunies :
 // 1. l'init complète du site est terminée (toutes les requêtes de textures lancées)
@@ -378,7 +381,7 @@ window._setInvertEffect = (active) => {
 };
 
 // ─── UI au-dessus du canvas ───────────────────────────────────────────────
-['overlay-controls','btn','hint','beta-tag','debug-panel','bg-debug-panel','mode-btn'].forEach(id => {
+['overlay-controls','btn','hint','beta-tag','debug-panel','bg-debug-panel','mode-btn','page-pan-bar'].forEach(id => {
     const el = document.getElementById(id);
     if (el) document.body.appendChild(el);
 });
@@ -457,6 +460,93 @@ function resetCameraView() {
     });
 }
 
+// ─── Pan gauche/droite (mode focus, téléphone uniquement) ─────────────────
+// Sur un écran étroit, cadrer les DEUX pages (fitCameraToSpread) oblige la
+// caméra à reculer beaucoup → chaque page devient minuscule. On cadre donc
+// UNE SEULE page (celle visée par `t`), et une barre de scroll horizontale
+// (#page-pan-slider) fait glisser `t` entre 0 (page gauche) et 1 (page droite).
+let pagePanT = 0;
+const pagePanBar = document.getElementById('page-pan-bar');
+const pagePanSlider = document.getElementById('page-pan-slider');
+
+function computePageFrame(t) {
+    const lv = window._leaves;
+    const boxL = new THREE.Box3();
+    const boxR = new THREE.Box3();
+    if (lv) { boxL.expandByObject(lv[0]); boxR.expandByObject(lv[1]); }
+    if (boxL.isEmpty()) boxL.setFromCenterAndSize(new THREE.Vector3(0, 0, 0), new THREE.Vector3(1.6, 2.1, 0.1));
+    if (boxR.isEmpty()) boxR.copy(boxL);
+    const centerL = boxL.getCenter(new THREE.Vector3());
+    const centerR = boxR.getCenter(new THREE.Vector3());
+    const center = centerL.lerp(centerR, t); // lerp() mute centerL en place — devient le centre interpolé
+    const size = boxL.getSize(new THREE.Vector3()); // les deux pages ont la même taille
+    const vFov = camera.fov * Math.PI / 180;
+    const distH = (size.y / 2) / Math.tan(vFov / 2);
+    const distW = (size.x / 2) / (Math.tan(vFov / 2) * camera.aspect);
+    const dist = Math.max(distH, distW) * 1.18; // marge un peu plus large qu'en double page
+    return { x: center.x, y: center.y, z: center.z + size.z / 2 + dist, center };
+}
+
+function fitCameraToPage(t) {
+    const f = computePageFrame(t);
+    gsap.to(camera.position, {
+        x: f.x, y: f.y, z: f.z, duration: 0.5, ease: 'power2.inOut',
+        onUpdate: () => camera.lookAt(f.center.x, f.center.y, f.center.z)
+    });
+}
+
+// Drag du slider : suivi immédiat, sans tween (une animation qui traîne
+// derrière le doigt donnerait une impression de latence sur le scroll).
+function panToPage(t) {
+    gsap.killTweensOf(camera.position);
+    const f = computePageFrame(t);
+    camera.position.set(f.x, f.y, f.z);
+    camera.lookAt(f.center.x, f.center.y, f.center.z);
+}
+
+pagePanSlider.addEventListener('input', () => {
+    pagePanT = parseFloat(pagePanSlider.value);
+    if (focusLock) panToPage(pagePanT);
+});
+
+// Flèches ← → : défilement CONTINU tant que le bouton reste appuyé (comme les
+// flèches d'une vraie scrollbar), pas un saut instantané — Touvie s'attendait
+// à pouvoir maintenir la pression pour glisser progressivement d'une page à
+// l'autre. Pointer Events unifie souris et tactile en un seul jeu d'écouteurs.
+const PAGE_PAN_HOLD_RATE = 0.6; // parcours complet 0→1 en ~1.7s à appui maintenu
+let panHoldDir = 0;
+let panHoldRAF = null;
+let panHoldLast = 0;
+
+function stepPanHold(now) {
+    if (!panHoldDir) return;
+    const dt = (now - panHoldLast) / 1000;
+    panHoldLast = now;
+    pagePanT = Math.max(0, Math.min(1, pagePanT + panHoldDir * PAGE_PAN_HOLD_RATE * dt));
+    pagePanSlider.value = pagePanT;
+    if (focusLock) panToPage(pagePanT);
+    panHoldRAF = requestAnimationFrame(stepPanHold);
+}
+function stopPanHold() {
+    panHoldDir = 0;
+    cancelAnimationFrame(panHoldRAF);
+    document.querySelectorAll('.page-pan-arrow.panning').forEach(b => b.classList.remove('panning'));
+}
+[['page-pan-left', -1], ['page-pan-right', 1]].forEach(([id, dir]) => {
+    const btn = document.getElementById(id);
+    btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        btn.classList.add('panning');
+        panHoldDir = dir;
+        panHoldLast = performance.now();
+        cancelAnimationFrame(panHoldRAF);
+        panHoldRAF = requestAnimationFrame(stepPanHold);
+    });
+    btn.addEventListener('pointerup', stopPanHold);
+    btn.addEventListener('pointerleave', stopPanHold);
+    btn.addEventListener('pointercancel', stopPanHold);
+});
+
 const focusBtn = document.getElementById('focus-mode');
 function setFocus(lock) {
     focusLock = lock;
@@ -465,8 +555,21 @@ function setFocus(lock) {
     if (lock) {
         // Replace le livre en position ouverte de face, puis cadre la caméra
         bookRef.targetRot.x = 0; bookRef.targetRot.y = -Math.PI / 2;
-        gsap.to(bookRef.book.rotation, { x: 0, y: -Math.PI / 2, duration: 0.4, ease: 'power2.inOut', onComplete: fitCameraToSpread });
+        gsap.to(bookRef.book.rotation, {
+            x: 0, y: -Math.PI / 2, duration: 0.4, ease: 'power2.inOut',
+            onComplete: () => {
+                if (isPhoneMode()) {
+                    pagePanT = 0; pagePanSlider.value = 0;
+                    pagePanBar.classList.add('visible');
+                    fitCameraToPage(pagePanT);
+                } else {
+                    pagePanBar.classList.remove('visible');
+                    fitCameraToSpread();
+                }
+            }
+        });
     } else {
+        pagePanBar.classList.remove('visible');
         resetCameraView();
     }
 }
@@ -482,6 +585,7 @@ document.getElementById('btn').addEventListener('click', () => {
 // Sortie propre du focus quand on ferme le livre
 window._resetView = () => {
     if (focusLock) { focusLock = false; window._focusLock = false; focusBtn.textContent = 'Libre'; }
+    pagePanBar.classList.remove('visible');
     resetCameraView();
 };
 
@@ -504,7 +608,10 @@ window.addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight);
     composer.setSize(innerWidth, innerHeight);
     distortPass.uniforms.uAspect.value = camera.aspect;
-    if (focusLock) fitCameraToSpread();
+    if (focusLock) {
+        if (isPhoneMode()) { pagePanBar.classList.add('visible'); panToPage(pagePanT); }
+        else { pagePanBar.classList.remove('visible'); fitCameraToSpread(); }
+    }
 });
 
 // ─── Boucle ───────────────────────────────────────────────────────────────

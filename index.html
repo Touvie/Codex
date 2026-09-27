@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>CODEX</title>
     <link rel="icon" href="background/images/favicon.ico">
     <link rel="apple-touch-icon" sizes="180x180" href="background/images/favicon-180.png">
@@ -39,10 +39,14 @@
     </div>
 
     <div id="hint">Cliquer-glisser pour tourner · Molette pour zoomer</div>
-    <div id="beta-tag">Version 2.0</div>
+    <div id="beta-tag">Version 2.1</div>
 
     <div id="version-dropdown">
         <h4>Nouveautés</h4>
+        <ul>
+            <li>Responsive téléphone (décor, HUD, lecture page par page)</li>
+        </ul>
+        <h4>Version 2.0</h4>
         <ul>
             <li>Refonte du preloader</li>
             <li>Refonte totale de la couverture du livre</li>
@@ -57,7 +61,6 @@
         <h4>À venir</h4>
         <ul>
             <li>Divers bugs</li>
-            <li>Responsive téléphone</li>
             <li>Page 404</li>
             <li>Création du making-of</li>
             <li>Préface</li>
@@ -71,6 +74,16 @@
         <span id="page-indicator">Page 1</span>
         <button id="next-page" class="book-nav-btn">Suivant&nbsp;→</button>
         <button id="overlay-close" class="book-nav-btn">Fermer</button>
+    </div>
+
+    <!-- Pan horizontal entre page gauche/droite — téléphone + mode focus uniquement (v2.1) -->
+    <div id="page-pan-bar">
+        <div class="page-pan-hint">Glisser pour lire</div>
+        <div class="page-pan-track-row">
+            <button type="button" id="page-pan-left" class="page-pan-arrow" aria-label="Aller à la page de gauche">←</button>
+            <input type="range" id="page-pan-slider" min="0" max="1" step="0.01" value="0" aria-label="Naviguer entre la page gauche et la page droite">
+            <button type="button" id="page-pan-right" class="page-pan-arrow" aria-label="Aller à la page de droite">→</button>
+        </div>
     </div>
 
     <div id="download-menu" class="overlay-menu">

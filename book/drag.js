@@ -32,11 +32,19 @@ export function initDrag(renderer, camera, bookRef, onDragStart, onDragEnd) {
     renderer.domElement.addEventListener('mouseup',    endDrag);
     renderer.domElement.addEventListener('mouseleave', endDrag);
 
+    // preventDefault() sur touchstart supprime le "click" de synthèse que le
+    // navigateur génère normalement après un tap — indispensable pour bloquer
+    // le scroll pendant un vrai drag, mais ça tuait aussi le tap sur les
+    // hotspots (sommaire, portail Oblivion) en mode focus/orbite, où aucun
+    // drag ne démarre jamais (cf. garde dans startDrag). Solution : ne faire
+    // preventDefault()/démarrer le drag QUE si on va réellement s'en servir.
     renderer.domElement.addEventListener('touchstart', e => {
+        if (window._focusLock || window._orbitMode) return;
         e.preventDefault();
         startDrag(e.touches[0].clientX, e.touches[0].clientY);
     }, { passive: false });
     renderer.domElement.addEventListener('touchmove', e => {
+        if (!drag) return;
         e.preventDefault();
         moveDrag(e.touches[0].clientX, e.touches[0].clientY);
     }, { passive: false });

@@ -77,6 +77,130 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
     min-width: 120px;
 }
 
+/* ── Pan horizontal gauche/droite (téléphone, mode focus) ──────────────
+   Masqué par défaut (display:none) : ne s'active qu'en dessous du
+   breakpoint mobile (media query plus bas), et seulement pendant le focus
+   (classe .visible ajoutée par js/main.js — cf. setFocus()). */
+#page-pan-bar {
+    position: fixed;
+    /* + safe-area : évite le chevauchement avec la barre de geste du bas sur
+       iPhone (nécessite viewport-fit=cover dans le <meta viewport>, sinon
+       env() vaut 0 et ce calc() revient à un simple 96px). */
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: min(82vw, 300px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+    z-index: 5;
+}
+#page-pan-bar.visible { opacity: 1; pointer-events: auto; }
+#page-pan-bar .page-pan-hint {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    /* Texte quasi noir (même teinte que le texte des boutons du HUD au
+       survol, #1a1208) : contraste déjà suffisant sur le fond sable tout
+       seul. Le contour (-webkit-text-stroke + text-shadow 4 directions)
+       tenté avant rendait les lettres floues à cette taille — plus épais
+       que les traits eux-mêmes, il les faisait baver plutôt que les cerner. */
+    color: #1a1208;
+}
+/* Piste + curseur enfermés dans une pilule sombre (même famille visuelle que
+   les boutons du HUD) — sans ce fond opaque le slider se fondait dans le
+   décor/les pages derrière lui, quelle que soit sa couleur. */
+#page-pan-bar .page-pan-track-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: rgba(12,8,3,0.82);
+    border: 1px solid rgba(201,168,76,0.55);
+    border-radius: 20px;
+    padding: 10px 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+}
+#page-pan-bar .page-pan-arrow {
+    background: transparent;
+    border: 1px solid rgba(201,168,76,0.55);
+    border-radius: 50%;
+    width: 26px; height: 26px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(201,168,76,0.95);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1;
+    flex-shrink: 0;
+    cursor: pointer;
+    touch-action: none; /* évite tout scroll/zoom navigateur pendant l'appui maintenu */
+    transition: background 0.2s, color 0.2s;
+}
+#page-pan-bar .page-pan-arrow:hover,
+#page-pan-bar .page-pan-arrow:active,
+#page-pan-bar .page-pan-arrow.panning { background: #c9a84c; color: #1a1208; border-color: #c9a84c; }
+#page-pan-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(201,168,76,0.4);
+    outline: none;
+}
+#page-pan-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #c9a84c;
+    border: 2px solid rgba(12,8,3,0.85);
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+#page-pan-slider::-moz-range-thumb {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #c9a84c;
+    border: 2px solid rgba(12,8,3,0.85);
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+#page-pan-slider::-moz-range-track { background: transparent; }
+
+/* ── Responsive téléphone (v2.1) ─────────────────────────────────────────
+   Le décor (background.js) et le livre 3D s'adaptent déjà d'eux-mêmes aux
+   dimensions du viewport — seuls le HUD bas et la barre de pan ci-dessus
+   ont besoin de règles dédiées. Breakpoint partagé avec js/main.js
+   (isPhoneMode) et background/background.js (isPhoneMode). */
+@media (max-width: 768px) {
+    #overlay-controls {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        width: calc(100% - 24px);
+        max-width: 340px;
+        bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    }
+    #overlay-controls .book-nav-btn {
+        padding: 8px 12px;
+        font-size: 9px;
+    }
+    #page-indicator {
+        min-width: 100%;
+        order: -1;
+        margin-bottom: 2px;
+    }
+    #page-pan-bar { display: flex; }
+}
+
 .lightbox {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0,0,0,0.9); display: none;

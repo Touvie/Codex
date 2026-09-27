@@ -125,6 +125,21 @@
     transition: transform 0.25s ease, opacity 0.2s ease;
 }
 #version-dropdown.visible { transform: scaleY(1) translateY(0); opacity: 1; pointer-events: auto; }
+
+/* ── Responsive téléphone (v2.1) ─────────────────────────────────────────
+   Le badge en bas à gauche entrait en collision avec le HUD #overlay-controls
+   une fois celui-ci remonté/agrandi sur 2 lignes (book/style.css) : il
+   chevauchait le bouton "← Précédent". Solution : sur mobile, le badge (et
+   son menu déroulant) passe en haut à gauche, hors de la bande du HUD. */
+@media (max-width: 768px) {
+    #beta-tag { top: 14px; bottom: auto; }
+    #version-dropdown {
+        top: 54px; bottom: auto;
+        transform-origin: top left;
+        transform: scaleY(0.85) translateY(-6px);
+    }
+    #version-dropdown.visible { transform: scaleY(1) translateY(0); }
+}
 #version-dropdown h4 {
     font-family: Georgia, serif;
     font-size: 11px;

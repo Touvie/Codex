@@ -3,7 +3,11 @@
 Cher visiteur, bonjour !
 Je savais bien que des gens viendront ici !
 
-Contenu de la nouvelle version Codex 2.0 :
+Contenu de la nouvelle version Codex 2.1 :
+
+- Responsive téléphone : décor recadré au lieu d'étiré, HUD adapté, lecture page par page avec barre de pan.
+
+Version 2.0 :
 
 - Refonte du preloader,
 - Refonte totale de la couverture du livre,
@@ -18,7 +22,6 @@ Contenu de la nouvelle version Codex 2.0 :
 Prochains ajouts :
 
 - Divers bugs,
-- Responsive téléphone,
 - Page 404,
 - Making-of,
 - Préface.
